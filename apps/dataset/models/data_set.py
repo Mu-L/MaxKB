@@ -27,6 +27,11 @@ class Type(models.TextChoices):
     web = 1, 'web站点类型'
 
 
+class HitHandlingMethod(models.TextChoices):
+    optimization = 'optimization', '模型优化'
+    directly_return = 'directly_return', '直接返回'
+
+
 class DataSet(AppModelMixin):
     """
     数据集表
@@ -58,6 +63,10 @@ class Document(AppModelMixin):
 
     type = models.CharField(verbose_name='类型', max_length=1, choices=Type.choices,
                             default=Type.base)
+    hit_handling_method = models.CharField(verbose_name='命中处理方式', max_length=20,
+                                           choices=HitHandlingMethod.choices,
+                                           default=HitHandlingMethod.optimization)
+    directly_return_similarity = models.FloatField(verbose_name='直接回答相似度', default=0.9)
 
     meta = models.JSONField(verbose_name="元数据", default=dict)
 
@@ -105,3 +114,12 @@ class ProblemParagraphMapping(AppModelMixin):
 
     class Meta:
         db_table = "problem_paragraph_mapping"
+
+
+class Image(AppModelMixin):
+    id = models.UUIDField(primary_key=True, max_length=128, default=uuid.uuid1, editable=False, verbose_name="主键id")
+    image = models.BinaryField(verbose_name="图片数据")
+    image_name = models.CharField(max_length=256, verbose_name="图片名称", default="")
+
+    class Meta:
+        db_table = "image"

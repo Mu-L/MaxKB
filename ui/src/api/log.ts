@@ -1,5 +1,5 @@
 import { Result } from '@/request/Result'
-import { get, post, del, put, exportExcel } from '@/request/index'
+import { get, del, put, exportExcel } from '@/request/index'
 import type { pageRequest } from '@/api/type/common'
 import { type Ref } from 'vue'
 
@@ -64,11 +64,12 @@ const getChatRecordLog: (
   application_id: String,
   chart_id: String,
   page: pageRequest,
-  loading?: Ref<boolean>
-) => Promise<Result<any>> = (application_id, chart_id, page, loading) => {
+  loading?: Ref<boolean>,
+  order_asc?: boolean
+) => Promise<Result<any>> = (application_id, chart_id, page, loading, order_asc) => {
   return get(
     `${prefix}/${application_id}/chat/${chart_id}/chat_record/${page.current_page}/${page.page_size}`,
-    undefined,
+    { order_asc: order_asc !== undefined ? order_asc : true },
     loading
   )
 }
@@ -173,6 +174,30 @@ const getRecordDetail: (
   )
 }
 
+const getChatLogClient: (
+  application_id: String,
+  page: pageRequest,
+  loading?: Ref<boolean>
+) => Promise<Result<any>> = (application_id, page, loading) => {
+  return get(
+    `${prefix}/${application_id}/chat/client/${page.current_page}/${page.page_size}`,
+    null,
+    loading
+  )
+}
+
+/**
+ * 客户端删除日志
+ * @param 参数 application_id, chat_id,
+ */
+const delChatClientLog: (
+  application_id: string,
+  chat_id: string,
+  loading?: Ref<boolean>
+) => Promise<Result<boolean>> = (application_id, chat_id, loading) => {
+  return del(`${prefix}/${application_id}/chat/client/${chat_id}`, undefined, {}, loading)
+}
+
 export default {
   getChatLog,
   delChatLog,
@@ -181,5 +206,7 @@ export default {
   getMarkRecord,
   getRecordDetail,
   delMarkRecord,
-  exportChatLog
+  exportChatLog,
+  getChatLogClient,
+  delChatClientLog
 }

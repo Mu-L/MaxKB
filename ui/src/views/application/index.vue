@@ -1,13 +1,14 @@
 <template>
   <div class="application-list-container p-24" style="padding-top: 16px">
     <div class="flex-between mb-16">
-      <h3>应用</h3>
+      <h4>{{ $t('views.application.applicationList.title') }}</h4>
       <el-input
         v-model="searchValue"
         @change="searchHandle"
-        placeholder="按名称搜索"
+        :placeholder="$t('views.application.applicationList.searchBar.placeholder')"
         prefix-icon="Search"
         class="w-240"
+        clearable
       />
     </div>
     <div v-loading.fullscreen.lock="paginationConfig.current_page === 1 && loading">
@@ -21,7 +22,10 @@
       >
         <el-row :gutter="15">
           <el-col :xs="24" :sm="12" :md="8" :lg="6" :xl="4" class="mb-16">
-            <CardAdd title="创建应用" @click="router.push({ path: '/application/create' })" />
+            <CardAdd
+              :title="$t('views.application.applicationList.card.createApplication')"
+              @click="openCreateDialog"
+            />
           </el-col>
           <el-col
             :xs="24"
@@ -37,37 +41,59 @@
               :title="item.name"
               :description="item.desc"
               class="application-card cursor"
-              @click="router.push({ path: `/application/${item.id}/overview` })"
+              @click="router.push({ path: `/application/${item.id}/${item.type}/overview` })"
             >
               <template #icon>
                 <AppAvatar
-                  v-if="item.name"
-                  :name="item.name"
-                  pinyinColor
-                  class="mr-12"
+                  v-if="isAppIcon(item?.icon)"
                   shape="square"
                   :size="32"
+                  style="background: none"
+                  class="mr-8"
+                >
+                  <img :src="item?.icon" alt="" />
+                </AppAvatar>
+                <AppAvatar
+                  v-else-if="item?.name"
+                  :name="item?.name"
+                  pinyinColor
+                  shape="square"
+                  :size="32"
+                  class="mr-8"
                 />
               </template>
+              <div class="status-tag">
+                <el-tag type="warning" v-if="isWorkFlow(item.type)">高级编排</el-tag>
+                <el-tag v-else>简单配置</el-tag>
+              </div>
 
               <template #footer>
                 <div class="footer-content">
-                  <el-tooltip effect="dark" content="演示" placement="top">
+                  <el-tooltip
+                    effect="dark"
+                    :content="$t('views.application.applicationList.card.demo')"
+                    placement="top"
+                  >
                     <el-button text @click.stop @click="getAccessToken(item.id)">
                       <AppIcon iconName="app-view"></AppIcon>
                     </el-button>
                   </el-tooltip>
                   <el-divider direction="vertical" />
-                  <el-tooltip effect="dark" content="设置" placement="top">
-                    <el-button
-                      text
-                      @click.stop="router.push({ path: `/application/${item.id}/setting` })"
-                    >
+                  <el-tooltip
+                    effect="dark"
+                    :content="$t('views.application.applicationList.card.setting')"
+                    placement="top"
+                  >
+                    <el-button text @click.stop="settingApplication(item)">
                       <AppIcon iconName="Setting"></AppIcon>
                     </el-button>
                   </el-tooltip>
                   <el-divider direction="vertical" />
-                  <el-tooltip effect="dark" content="删除" placement="top">
+                  <el-tooltip
+                    effect="dark"
+                    :content="$t('views.application.applicationList.card.delete.tooltip')"
+                    placement="top"
+                  >
                     <el-button text @click.stop="deleteApplication(item)">
                       <el-icon><Delete /></el-icon>
                     </el-button>
@@ -79,17 +105,23 @@
         </el-row>
       </InfiniteScroll>
     </div>
+    <CreateApplicationDialog ref="CreateApplicationDialogRef" />
   </div>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, reactive, computed } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import applicationApi from '@/api/application'
+import CreateApplicationDialog from './component/CreateApplicationDialog.vue'
 import { MsgSuccess, MsgConfirm } from '@/utils/message'
+import { isAppIcon } from '@/utils/application'
 import { useRouter } from 'vue-router'
+import { isWorkFlow } from '@/utils/application'
 import useStore from '@/stores'
+import { t } from '@/locales'
 const { application } = useStore()
 const router = useRouter()
 
+const CreateApplicationDialogRef = ref()
 const loading = ref(false)
 
 const applicationList = ref<any[]>([])
@@ -101,6 +133,18 @@ const paginationConfig = reactive({
 })
 
 const searchValue = ref('')
+
+function settingApplication(row: any) {
+  if (isWorkFlow(row.type)) {
+    router.push({ path: `/application/${row.id}/workflow` })
+  } else {
+    router.push({ path: `/application/${row.id}/${row.type}/setting` })
+  }
+}
+
+function openCreateDialog() {
+  CreateApplicationDialogRef.value.open()
+}
 
 function searchHandle() {
   paginationConfig.total = 0
@@ -115,15 +159,21 @@ function getAccessToken(id: string) {
 }
 
 function deleteApplication(row: any) {
-  MsgConfirm(`是否删除应用：${row.name} ?`, `删除后该应用将不再提供服务，请谨慎操作。`, {
-    confirmButtonText: '删除',
-    confirmButtonClass: 'danger'
-  })
+  MsgConfirm(
+    // @ts-ignore
+    `${t('views.application.applicationList.card.delete.confirmTitle')}${row.name} ?`,
+    t('views.application.applicationList.card.delete.confirmMessage'),
+    {
+      confirmButtonText: t('views.application.applicationList.card.delete.confirmButton'),
+      cancelButtonText: t('views.application.applicationList.card.delete.cancelButton'),
+      confirmButtonClass: 'danger'
+    }
+  )
     .then(() => {
       applicationApi.delApplication(row.id, loading).then(() => {
         const index = applicationList.value.findIndex((v) => v.id === row.id)
         applicationList.value.splice(index, 1)
-        MsgSuccess('删除成功')
+        MsgSuccess(t('views.application.applicationList.card.delete.successMessage'))
       })
     })
     .catch(() => {})

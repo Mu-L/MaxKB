@@ -21,25 +21,28 @@
           </p>
         </div>
         <el-dropdown-item class="border-t p-8" @click="openResetPassword">
-          修改密码
+          {{ $t("layout.topbar.avatar.resetPassword") }}
         </el-dropdown-item>
-        <el-dropdown-item class="border-t" @click="openAbout"> 关于 </el-dropdown-item>
-        <el-dropdown-item class="border-t" @click="logout"> 退出 </el-dropdown-item>
+        <el-dropdown-item class="border-t" @click="openAbout"> {{ $t("layout.topbar.avatar.about") }} </el-dropdown-item>
+        <el-dropdown-item class="border-t" @click="logout"> {{ $t("layout.topbar.avatar.logout") }} </el-dropdown-item>
       </el-dropdown-menu>
     </template>
   </el-dropdown>
   <ResetPassword ref="resetPasswordRef"></ResetPassword>
   <AboutDialog ref="AboutDialogRef"></AboutDialog>
+  <UserPwdDialog ref="UserPwdDialogRef" />
 </template>
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import useStore from '@/stores'
 import { useRouter } from 'vue-router'
 import ResetPassword from './ResetPassword.vue'
 import AboutDialog from './AboutDialog.vue'
+import UserPwdDialog from '@/views/user-manage/component/UserPwdDialog.vue'
 const { user } = useStore()
 const router = useRouter()
 
+const UserPwdDialogRef = ref()
 const AboutDialogRef = ref()
 const resetPasswordRef = ref<InstanceType<typeof ResetPassword>>()
 
@@ -56,6 +59,12 @@ const logout = () => {
     router.push({ name: 'login' })
   })
 }
+
+onMounted(() => {
+  if (user.userInfo?.is_edit_password) {
+    UserPwdDialogRef.value.open(user.userInfo)
+  }
+})
 </script>
 <style lang="scss" scoped>
 .avatar-dropdown {

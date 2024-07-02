@@ -12,6 +12,17 @@ from common.mixins.api_mixin import ApiMixin
 
 
 class ApplicationApi(ApiMixin):
+    class EditApplicationIcon(ApiMixin):
+        @staticmethod
+        def get_request_params_api():
+            return [
+                openapi.Parameter(name='file',
+                                  in_=openapi.IN_FORM,
+                                  type=openapi.TYPE_FILE,
+                                  required=True,
+                                  description='上传文件')
+            ]
+
     class Authentication(ApiMixin):
         @staticmethod
         def get_request_body_api():
@@ -90,7 +101,10 @@ class ApplicationApi(ApiMixin):
                     properties={
                         'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN, title="是否激活",
                                                     description="是否激活"),
-
+                        'allow_cross_domain': openapi.Schema(type=openapi.TYPE_BOOLEAN, title="是否允许跨域",
+                                                             description="是否允许跨域"),
+                        'cross_domain_list': openapi.Schema(type=openapi.TYPE_ARRAY, title='跨域列表',
+                                                            items=openapi.Schema(type=openapi.TYPE_STRING))
                     }
                 )
 
@@ -121,6 +135,8 @@ class ApplicationApi(ApiMixin):
                     'white_list': openapi.Schema(type=openapi.TYPE_ARRAY,
                                                  items=openapi.Schema(type=openapi.TYPE_STRING), title="白名单列表",
                                                  description="白名单列表"),
+                    'show_source': openapi.Schema(type=openapi.TYPE_BOOLEAN, title="是否显示知识来源",
+                                                  description="是否显示知识来源"),
                 }
             )
 
@@ -143,7 +159,27 @@ class ApplicationApi(ApiMixin):
                     'dataset_setting': ApplicationApi.DatasetSetting.get_request_body_api(),
                     'model_setting': ApplicationApi.ModelSetting.get_request_body_api(),
                     'problem_optimization': openapi.Schema(type=openapi.TYPE_BOOLEAN, title="问题优化",
-                                                           description="是否开启问题优化", default=True)
+                                                           description="是否开启问题优化", default=True),
+                    'icon': openapi.Schema(type=openapi.TYPE_STRING, title="icon",
+                                           description="icon", default="/ui/favicon.ico"),
+                    'work_flow': ApplicationApi.WorkFlow.get_request_body_api()
+
+                }
+            )
+
+    class WorkFlow(ApiMixin):
+        @staticmethod
+        def get_request_body_api():
+            return openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                required=[''],
+                properties={
+                    'nodes': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT),
+                                            title="节点列表", description="节点列表",
+                                            default=[]),
+                    'edges': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT),
+                                            title='连线列表', description="连线列表",
+                                            default={}),
 
                 }
             )
@@ -161,6 +197,20 @@ class ApplicationApi(ApiMixin):
                                                  default=0.6),
                     'max_paragraph_char_number': openapi.Schema(type=openapi.TYPE_NUMBER, title='最多引用字符数',
                                                                 description="最多引用字符数", default=3000),
+                    'search_mode': openapi.Schema(type=openapi.TYPE_STRING, title='检索模式',
+                                                  description="embedding|keywords|blend", default='embedding'),
+                    'no_references_setting': openapi.Schema(type=openapi.TYPE_OBJECT, title='检索模式',
+                                                            required=['status', 'value'],
+                                                            properties={
+                                                                'status': openapi.Schema(type=openapi.TYPE_STRING,
+                                                                                         title="状态",
+                                                                                         description="ai作答:ai_questioning,指定回答:designated_answer",
+                                                                                         default='ai_questioning'),
+                                                                'value': openapi.Schema(type=openapi.TYPE_STRING,
+                                                                                        title="值",
+                                                                                        description="ai作答:就是题词,指定回答:就是指定回答内容",
+                                                                                        default='{question}'),
+                                                            }),
                 }
             )
 
@@ -187,6 +237,17 @@ class ApplicationApi(ApiMixin):
                 }
             )
 
+    class Publish(ApiMixin):
+        @staticmethod
+        def get_request_body_api():
+            return openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                required=[],
+                properties={
+                    'work_flow': ApplicationApi.WorkFlow.get_request_body_api()
+                }
+            )
+
     class Create(ApiMixin):
         @staticmethod
         def get_request_body_api():
@@ -207,7 +268,9 @@ class ApplicationApi(ApiMixin):
                     'dataset_setting': ApplicationApi.DatasetSetting.get_request_body_api(),
                     'model_setting': ApplicationApi.ModelSetting.get_request_body_api(),
                     'problem_optimization': openapi.Schema(type=openapi.TYPE_BOOLEAN, title="问题优化",
-                                                           description="是否开启问题优化", default=True)
+                                                           description="是否开启问题优化", default=True),
+                    'type': openapi.Schema(type=openapi.TYPE_STRING, title="应用类型",
+                                           description="应用类型 简易:SIMPLE|工作流:WORK_FLOW")
 
                 }
             )

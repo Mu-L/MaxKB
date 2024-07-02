@@ -51,26 +51,44 @@
               />
             </el-form-item>
           </el-form>
-
-          <h4 class="title-decoration-1 mb-16">关联应用</h4>
-
-          <el-row :gutter="12">
-            <el-col :span="12" v-for="(item, index) in application_list" :key="index" class="mb-16">
-              <CardCheckbox value-field="id" :data="item" v-model="application_id_list">
-                <template #icon>
-                  <AppAvatar
-                    v-if="item.name"
-                    :name="item.name"
-                    pinyinColor
-                    class="mr-12"
-                    shape="square"
-                    :size="32"
-                  />
-                </template>
-                {{ item.name }}
-              </CardCheckbox>
-            </el-col>
-          </el-row>
+          <div v-if="application_id_list.length > 0">
+            <h4 class="title-decoration-1 mb-16">关联应用</h4>
+            <el-row :gutter="12">
+              <el-col
+                :span="12"
+                v-for="(item, index) in application_list.filter((obj: any) =>
+                  application_id_list.some((v: any) => v === obj?.id)
+                )"
+                :key="index"
+                class="mb-16"
+              >
+                <el-card shadow="never">
+                  <div class="flex-between">
+                    <div class="flex align-center">
+                      <AppAvatar
+                        v-if="isAppIcon(item?.icon)"
+                        shape="square"
+                        :size="32"
+                        style="background: none"
+                        class="mr-12"
+                      >
+                        <img :src="item?.icon" alt="" />
+                      </AppAvatar>
+                      <AppAvatar
+                        v-else-if="item?.name"
+                        :name="item?.name"
+                        pinyinColor
+                        shape="square"
+                        :size="32"
+                        class="mr-12"
+                      />
+                      {{ item.name }}
+                    </div>
+                  </div>
+                </el-card>
+              </el-col>
+            </el-row>
+          </div>
 
           <div class="text-right">
             <el-button @click="submit" type="primary"> 保存 </el-button>
@@ -87,6 +105,7 @@ import BaseForm from '@/views/dataset/component/BaseForm.vue'
 import datasetApi from '@/api/dataset'
 import type { ApplicationFormType } from '@/api/type/application'
 import { MsgSuccess } from '@/utils/message'
+import { isAppIcon } from '@/utils/application'
 import useStore from '@/stores'
 const route = useRoute()
 const {

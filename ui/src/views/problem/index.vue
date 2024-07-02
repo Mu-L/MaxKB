@@ -16,6 +16,7 @@
             prefix-icon="Search"
             class="w-240"
             @change="getList"
+            clearable
           />
         </div>
         <app-table
@@ -42,7 +43,7 @@
           <el-table-column prop="content" label="问题" min-width="280">
             <template #default="{ row }">
               <ReadWrite
-                @change="editName"
+                @change="editName($event, row.id)"
                 :data="row.content"
                 :showEditIcon="row.id === currentMouseId"
                 :maxlength="256"
@@ -121,7 +122,7 @@ import useStore from '@/stores'
 
 const route = useRoute()
 const {
-  params: { id }
+  params: { id } // 知识库id
 } = route as any
 
 const { problem } = useStore()
@@ -194,6 +195,7 @@ function deleteMulDocument() {
   })
   problemApi.delMulProblem(id, arr, loading).then(() => {
     MsgSuccess('批量删除成功')
+    multipleTableRef.value?.clearSelection()
     getList()
   })
 }
@@ -216,12 +218,12 @@ function deleteProblem(row: any) {
     .catch(() => {})
 }
 
-function editName(val: string) {
+function editName(val: string, problemId: string) {
   if (val) {
     const obj = {
       content: val
     }
-    problemApi.putProblems(id, currentMouseId.value, obj, loading).then(() => {
+    problemApi.putProblems(id, problemId, obj, loading).then(() => {
       getList()
       MsgSuccess('修改成功')
     })
@@ -295,7 +297,10 @@ const preChatRecord = () => {
   }
 }
 
-function rowClickHandle(row: any) {
+function rowClickHandle(row: any, column?: any) {
+  if (column && column.type === 'selection') {
+    return
+  }
   if (row.paragraph_count) {
     currentClickId.value = row.id
     currentContent.value = row.content

@@ -5,7 +5,7 @@
   --el-box-shadow-light: 0px 2px 4px 0px rgba(31, 35, 41, 0.12);
   --el-border-color: #dee0e3;
   --el-text-color-regular: #1f2329;
-  --el-color-info: #8f959e;
+  --el-color-info: #8f959e !important;
 }
 
 .el-button {
@@ -23,6 +23,10 @@
     color: var(--el-button-text-color);
     background-color: var(--el-button-bg-color);
     border-color: var(--el-button-border-color);
+  }
+  &.is-link:focus {
+    background: none;
+    border: none;
   }
 }
 .el-button--large {
@@ -137,9 +141,15 @@
   color: var(--app-text-color);
   font-weight: 400;
   padding: 5px 11px;
-  &:not(.is-disabled):focus {
+  &:not(.is-disabled):focus,
+  &:not(.is-active):focus {
     background-color: var(--app-text-color-light-1);
     color: var(--app-text-color);
+  }
+  &.is-active,
+  &.is-active:hover {
+    color: var(--el-menu-active-color);
+    background: var(--el-color-primary-light-9);
   }
 }
 
@@ -306,6 +316,10 @@
 .el-popover {
   --el-popover-padding: 16px;
 }
+
+.el-radio {
+  --el-radio-font-weight: 400;
+}
 .el-radio__input.is-checked + .el-radio__label {
   color: var(--app-text-color);
 }
@@ -318,4 +332,32 @@
 .el-input-number.is-without-controls .el-input__wrapper {
   padding-left: 12px !important;
   padding-right: 12px !important;
+}
+
+// select下拉框
+.select-popper {
+  max-width: 300px;
+  .el-select-dropdown__wrap {
+    max-width: 300px;
+  }
+}
+
+.auto-tooltip-popper {
+  max-width: 500px;
+}
+
+// radio 一行一个样式
+.radio-block {
+  width: 100%;
+  display: block;
+  .el-radio {
+    align-items: flex-start;
+    height: 100%;
+    width: 100%;
+  }
+  .el-radio__label {
+    width: 100%;
+    margin-top: -8px;
+    line-height: 30px;
+  }
 }

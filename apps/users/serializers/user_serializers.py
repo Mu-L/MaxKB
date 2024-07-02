@@ -128,7 +128,7 @@ class RegisterSerializer(ApiMixin, serializers.Serializer):
                                      max_length=20,
                                      min_length=6,
                                      validators=[
-                                         validators.RegexValidator(regex=re.compile("^[a-zA-Z][a-zA-Z1-9_]{5,20}$"),
+                                         validators.RegexValidator(regex=re.compile("^[a-zA-Z][a-zA-Z0-9_]{5,20}$"),
                                                                    message="用户名字符数为 6-20 个字符，必须以字母开头，可使用字母、数字、下划线等")
                                      ])
     password = serializers.CharField(required=True, error_messages=ErrMessage.char("密码"),
@@ -418,7 +418,8 @@ class UserProfile(ApiMixin):
         permission_list = get_user_dynamics_permission(str(user.id))
         permission_list += [p.value for p in get_permission_list_by_role(RoleConstants[user.role])]
         return {'id': user.id, 'username': user.username, 'email': user.email, 'role': user.role,
-                'permissions': [str(p) for p in permission_list]}
+                'permissions': [str(p) for p in permission_list],
+                'is_edit_password': user.password == 'd880e722c47a34d8e9fce789fc62389d' if user.role == 'ADMIN' else False}
 
     @staticmethod
     def get_response_body_api():
@@ -581,7 +582,7 @@ class UserManageSerializer(serializers.Serializer):
                                          max_length=20,
                                          min_length=6,
                                          validators=[
-                                             validators.RegexValidator(regex=re.compile("^[a-zA-Z][a-zA-Z1-9_]{5,20}$"),
+                                             validators.RegexValidator(regex=re.compile("^[a-zA-Z][a-zA-Z0-9_]{5,20}$"),
                                                                        message="用户名字符数为 6-20 个字符，必须以字母开头，可使用字母、数字、下划线等")
                                          ])
         password = serializers.CharField(required=True, error_messages=ErrMessage.char("密码"),

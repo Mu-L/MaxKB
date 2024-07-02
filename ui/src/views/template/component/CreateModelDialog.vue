@@ -6,6 +6,7 @@
     :close-on-press-escape="false"
     :destroy-on-close="true"
     :before-close="close"
+    append-to-body
   >
     <template #header="{ close, titleId, titleClass }">
       <el-breadcrumb separator=">">
@@ -30,9 +31,23 @@
       label-position="top"
       require-asterisk-position="right"
       class="mb-24"
+      label-width="auto"
     >
       <template #default>
-        <el-form-item label="模型名称" prop="name" :rules="base_form_data_rule.name">
+        <el-form-item prop="name" :rules="base_form_data_rule.name">
+          <template #label>
+            <div class="flex align-center" style="display: inline-flex">
+              <div class="flex-between mr-4">
+                <span>模型名称 </span>
+              </div>
+              <el-tooltip effect="dark" placement="right">
+                <template #content>
+                  <p>MaxKB 中自定义的模型名称</p>
+                </template>
+                <AppIcon iconName="app-warning" class="app-warning-icon"></AppIcon>
+              </el-tooltip>
+            </div>
+          </template>
           <el-input
             v-model="base_form_data.name"
             maxlength="20"
@@ -40,13 +55,15 @@
             placeholder="请给基础模型设置一个名称"
           />
         </el-form-item>
-        <el-form-item label="模型类型" prop="model_type" :rules="base_form_data_rule.model_type">
+        <el-form-item prop="model_type" :rules="base_form_data_rule.model_type">
+          <template #label>
+            <span>模型类型</span>
+          </template>
           <el-select
             v-loading="model_type_loading"
             @change="list_base_model($event)"
-            style="width: 100%"
             v-model="base_form_data.model_type"
-            class="m-2"
+            class="w-full m-2"
             placeholder="请选择模型类型"
           >
             <el-option
@@ -54,28 +71,50 @@
               :key="item.value"
               :label="item.key"
               :value="item.value"
-            ></el-option
-          ></el-select>
+            ></el-option>
+          </el-select>
         </el-form-item>
-        <el-form-item label="基础模型" prop="model_name" :rules="base_form_data_rule.model_name">
+        <el-form-item prop="model_name" :rules="base_form_data_rule.model_name">
+          <template #label>
+            <div class="flex align-center" style="display: inline-flex">
+              <div class="flex-between mr-4">
+                <span>基础模型 </span>
+              </div>
+              <el-tooltip effect="dark" placement="right">
+                <template #content>
+                  <p>若下拉选项没有列出想要添加的LLM模型，自定义输入模型名称后回车即可</p>
+                  <p>注意，基础模型需要与供应商的模型名称一致</p>
+                </template>
+                <AppIcon iconName="app-warning" class="app-warning-icon"></AppIcon>
+              </el-tooltip>
+            </div>
+          </template>
           <el-select
             @change="getModelForm($event)"
             v-loading="base_model_loading"
-            style="width: 100%"
             v-model="base_form_data.model_name"
-            class="m-2"
-            placeholder="请选择基础模型"
+            class="w-full m-2"
+            placeholder="自定义输入基础模型后回车即可"
             filterable
             allow-create
             default-first-option
           >
-            <el-option
-              v-for="item in base_model_list"
-              :key="item.name"
-              :label="item.name"
-              :value="item.name"
-            ></el-option
-          ></el-select>
+            <el-option v-for="item in base_model_list" :key="item.name" :value="item.name">
+              <template #default>
+                <div class="flex align-center" style="display: inline-flex">
+                  <div class="flex-between mr-4">
+                    <span>{{ item.name }} </span>
+                  </div>
+                  <el-tooltip effect="dark" placement="right" v-if="item.desc">
+                    <template #content>
+                      <p>{{ item.desc }}</p>
+                    </template>
+                    <AppIcon iconName="app-warning" class="app-warning-icon"></AppIcon>
+                  </el-tooltip>
+                </div>
+              </template>
+            </el-option>
+          </el-select>
         </el-form-item>
       </template>
     </DynamicsForm>
@@ -96,6 +135,7 @@ import type { FormField } from '@/components/dynamics-form/type'
 import DynamicsForm from '@/components/dynamics-form/index.vue'
 import type { FormRules } from 'element-plus'
 import { MsgSuccess } from '@/utils/message'
+
 const providerValue = ref<Provider>()
 const dynamicsFormRef = ref<InstanceType<typeof DynamicsForm>>()
 const emit = defineEmits(['change', 'submit'])
@@ -170,9 +210,12 @@ const list_base_model = (model_type: any) => {
     )
   }
 }
+
 const close = () => {
   base_form_data.value = { name: '', model_type: '', model_name: '' }
   credential_form_data.value = {}
+  model_form_field.value = []
+  base_model_list.value = []
   dialogVisible.value = false
 }
 const submit = () => {
@@ -206,10 +249,12 @@ defineExpose({ open, close })
   font-weight: 400;
   line-height: 24px;
   cursor: pointer;
+
   &:hover {
     color: var(--el-color-primary);
   }
 }
+
 .active-breadcrumb {
   font-size: 16px;
   color: rgba(31, 35, 41, 1);

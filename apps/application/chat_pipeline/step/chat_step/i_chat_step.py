@@ -15,9 +15,9 @@ from rest_framework import serializers
 
 from application.chat_pipeline.I_base_chat_pipeline import IBaseChatPipelineStep, ParagraphPipelineModel
 from application.chat_pipeline.pipeline_manage import PipelineManage
+from application.serializers.application_serializers import NoReferencesSetting
 from common.field.common import InstanceField
 from common.util.field_message import ErrMessage
-from dataset.models import Paragraph
 
 
 class ModelField(serializers.Field):
@@ -54,7 +54,7 @@ class IChatStep(IBaseChatPipelineStep):
         message_list = serializers.ListField(required=True, child=MessageField(required=True),
                                              error_messages=ErrMessage.list("对话列表"))
         # 大语言模型
-        chat_model = ModelField(error_messages=ErrMessage.list("大语言模型"))
+        chat_model = ModelField(required=False, allow_null=True, error_messages=ErrMessage.list("大语言模型"))
         # 段落列表
         paragraph_list = serializers.ListField(error_messages=ErrMessage.list("段落列表"))
         # 对话id
@@ -70,6 +70,8 @@ class IChatStep(IBaseChatPipelineStep):
         stream = serializers.BooleanField(required=False, error_messages=ErrMessage.base("流式输出"))
         client_id = serializers.CharField(required=True, error_messages=ErrMessage.char("客户端id"))
         client_type = serializers.CharField(required=True, error_messages=ErrMessage.char("客户端类型"))
+        # 未查询到引用分段
+        no_references_setting = NoReferencesSetting(required=True, error_messages=ErrMessage.base("无引用分段设置"))
 
         def is_valid(self, *, raise_exception=False):
             super().is_valid(raise_exception=True)
@@ -92,5 +94,6 @@ class IChatStep(IBaseChatPipelineStep):
                 chat_model: BaseChatModel = None,
                 paragraph_list=None,
                 manage: PipelineManage = None,
-                padding_problem_text: str = None, stream: bool = True, client_id=None, client_type=None, **kwargs):
+                padding_problem_text: str = None, stream: bool = True, client_id=None, client_type=None,
+                no_references_setting=None, **kwargs):
         pass

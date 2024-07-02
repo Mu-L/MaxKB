@@ -20,9 +20,15 @@
               v-if="datasetDetail.type === '1'"
               >同步文档</el-button
             >
-            <el-button @click="deleteMulDocument" :disabled="multipleSelection.length === 0"
-              >批量删除</el-button
-            >
+            <el-button @click="openDatasetDialog()" :disabled="multipleSelection.length === 0">
+              迁移
+            </el-button>
+            <el-button @click="openBatchEditDocument" :disabled="multipleSelection.length === 0">
+              设置
+            </el-button>
+            <el-button @click="deleteMulDocument" :disabled="multipleSelection.length === 0">
+              删除
+            </el-button>
           </div>
 
           <el-input
@@ -31,6 +37,7 @@
             prefix-icon="Search"
             class="w-240"
             @change="getList"
+            clearable
           />
         </div>
         <app-table
@@ -54,7 +61,7 @@
           <el-table-column prop="name" label="文件名称" min-width="280">
             <template #default="{ row }">
               <ReadWrite
-                @change="editName"
+                @change="editName($event, row.id)"
                 :data="row.name"
                 :showEditIcon="row.id === currentMouseId"
               />
@@ -90,42 +97,89 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="create_time" label="创建时间" width="170">
+          <el-table-column width="130">
+            <template #header>
+              <div>
+                <span>命中处理方式</span>
+                <el-dropdown trigger="click" @command="dropdownHandle">
+                  <el-button style="margin-top: 1px" link :type="filterMethod ? 'primary' : ''">
+                    <el-icon><Filter /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu style="width: 100px">
+                      <el-dropdown-item
+                        :class="filterMethod ? '' : 'is-active'"
+                        command=""
+                        class="justify-center"
+                        >全部</el-dropdown-item
+                      >
+                      <template v-for="(value, key) of hitHandlingMethod" :key="key">
+                        <el-dropdown-item
+                          :class="filterMethod === key ? 'is-active' : ''"
+                          class="justify-center"
+                          :command="key"
+                          >{{ value }}</el-dropdown-item
+                        >
+                      </template>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
+            </template>
+            <template #default="{ row }">
+              {{ hitHandlingMethod[row.hit_handling_method as keyof typeof hitHandlingMethod] }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="create_time" label="创建时间" width="175">
             <template #default="{ row }">
               {{ datetimeFormat(row.create_time) }}
             </template>
           </el-table-column>
-          <el-table-column prop="update_time" label="更新时间" width="170">
+          <el-table-column prop="update_time" label="更新时间" width="175">
             <template #default="{ row }">
               {{ datetimeFormat(row.update_time) }}
             </template>
           </el-table-column>
-          <el-table-column label="操作" align="left">
+          <el-table-column label="操作" align="left" width="110">
             <template #default="{ row }">
               <div v-if="datasetDetail.type === '0'">
-                <span v-if="row.status === '2'" class="mr-4">
-                  <el-tooltip effect="dark" content="重试" placement="top">
+                <span class="mr-4">
+                  <el-tooltip effect="dark" content="重新向量化" placement="top">
                     <el-button type="primary" text @click.stop="refreshDocument(row)">
-                      <el-icon><RefreshRight /></el-icon>
+                      <AppIcon iconName="app-document-refresh" style="font-size: 16px"></AppIcon>
                     </el-button>
                   </el-tooltip>
                 </span>
-                <span>
-                  <el-tooltip effect="dark" content="删除" placement="top">
-                    <el-button type="primary" text @click.stop="deleteDocument(row)">
-                      <el-icon><Delete /></el-icon>
+                <span @click.stop>
+                  <el-dropdown trigger="click">
+                    <el-button text>
+                      <el-icon><MoreFilled /></el-icon>
                     </el-button>
-                  </el-tooltip>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item @click="settingDoc(row)">
+                          <el-icon><Setting /></el-icon>
+                          设置
+                        </el-dropdown-item>
+                        <el-dropdown-item @click="openDatasetDialog(row)">
+                          <AppIcon iconName="app-migrate"></AppIcon>
+                          迁移
+                        </el-dropdown-item>
+                        <el-dropdown-item @click="exportDocument(row)">
+                          <AppIcon iconName="app-export"></AppIcon>
+                          导出
+                        </el-dropdown-item>
+                        <el-dropdown-item icon="Delete" @click.stop="deleteDocument(row)"
+                          >删除</el-dropdown-item
+                        >
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                 </span>
               </div>
               <div v-if="datasetDetail.type === '1'">
-                <el-tooltip
-                  effect="dark"
-                  content="同步"
-                  placement="top"
-                  v-if="datasetDetail.type === '1'"
-                >
-                  <el-button type="primary" text @click.stop="refreshDocument(row)">
+                <el-tooltip effect="dark" content="同步" placement="top">
+                  <el-button type="primary" text @click.stop="syncDocument(row)">
                     <el-icon><Refresh /></el-icon>
                   </el-button>
                 </el-tooltip>
@@ -136,9 +190,24 @@
                     </el-button>
                     <template #dropdown>
                       <el-dropdown-menu>
+                        <el-dropdown-item @click="refreshDocument(row)">
+                          <AppIcon
+                            iconName="app-document-refresh"
+                            style="font-size: 16px"
+                          ></AppIcon>
+                          重新向量化</el-dropdown-item
+                        >
                         <el-dropdown-item icon="Setting" @click="settingDoc(row)"
                           >设置</el-dropdown-item
                         >
+                        <el-dropdown-item @click="openDatasetDialog(row)">
+                          <AppIcon iconName="app-migrate"></AppIcon>
+                          迁移</el-dropdown-item
+                        >
+                        <el-dropdown-item @click="exportDocument(row)">
+                          <AppIcon iconName="app-export"></AppIcon>
+                          导出
+                        </el-dropdown-item>
                         <el-dropdown-item icon="Delete" @click.stop="deleteDocument(row)"
                           >删除</el-dropdown-item
                         >
@@ -153,6 +222,8 @@
       </div>
       <ImportDocumentDialog ref="ImportDocumentDialogRef" :title="title" @refresh="refresh" />
       <SyncWebDialog ref="SyncWebDialogRef" @refresh="refresh" />
+      <!-- 选择知识库 -->
+      <SelectDatasetDialog ref="SelectDatasetDialogRef" @refresh="refreshMigrate" />
     </div>
   </LayoutContainer>
 </template>
@@ -163,8 +234,10 @@ import { ElTable } from 'element-plus'
 import documentApi from '@/api/document'
 import ImportDocumentDialog from './component/ImportDocumentDialog.vue'
 import SyncWebDialog from '@/views/dataset/component/SyncWebDialog.vue'
+import SelectDatasetDialog from './component/SelectDatasetDialog.vue'
 import { numberFormat } from '@/utils/utils'
 import { datetimeFormat } from '@/utils/time'
+import { hitHandlingMethod } from '@/enums/document'
 import { MsgSuccess, MsgConfirm, MsgError } from '@/utils/message'
 import useStore from '@/stores'
 const router = useRouter()
@@ -177,16 +250,19 @@ const { common, dataset, document } = useStore()
 
 const storeKey = 'documents'
 
-onBeforeRouteUpdate((to: any, from: any) => {
+onBeforeRouteUpdate(() => {
   common.savePage(storeKey, null)
   common.saveCondition(storeKey, null)
 })
-onBeforeRouteLeave((to: any, from: any) => {
+onBeforeRouteLeave((to: any) => {
   if (to.name !== 'Paragraph') {
     common.savePage(storeKey, null)
     common.saveCondition(storeKey, null)
   } else {
-    common.saveCondition(storeKey, filterText.value)
+    common.saveCondition(storeKey, {
+      filterText: filterText.value,
+      filterMethod: filterMethod.value
+    })
   }
 })
 const beforePagination = computed(() => common.paginationConfig[storeKey])
@@ -196,6 +272,7 @@ const SyncWebDialogRef = ref()
 const loading = ref(false)
 let interval: any
 const filterText = ref('')
+const filterMethod = ref<string | number>('')
 const documentData = ref<any[]>([])
 const currentMouseId = ref(null)
 const datasetDetail = ref<any>({})
@@ -210,6 +287,32 @@ const ImportDocumentDialogRef = ref()
 const multipleTableRef = ref<InstanceType<typeof ElTable>>()
 const multipleSelection = ref<any[]>([])
 const title = ref('')
+
+const SelectDatasetDialogRef = ref()
+const exportDocument = (document: any) => {
+  documentApi.exportDocument(document.name, document.dataset_id, document.id, loading).then(() => {
+    MsgSuccess('导出成功')
+  })
+}
+function openDatasetDialog(row?: any) {
+  const arr: string[] = []
+  if (row) {
+    arr.push(row.id)
+  } else {
+    multipleSelection.value.map((v) => {
+      if (v) {
+        arr.push(v.id)
+      }
+    })
+  }
+
+  SelectDatasetDialogRef.value.open(arr)
+}
+
+function dropdownHandle(val: string) {
+  filterMethod.value = val
+  getList()
+}
 
 function syncDataset() {
   SyncWebDialogRef.value.open(id)
@@ -228,17 +331,17 @@ const handleSelectionChange = (val: any[]) => {
   multipleSelection.value = val
 }
 
+function openBatchEditDocument() {
+  title.value = '设置'
+  const arr: string[] = multipleSelection.value.map((v) => v.id)
+  ImportDocumentDialogRef.value.open(null, arr)
+}
+
 /**
  * 初始化轮询
  */
 const initInterval = () => {
   interval = setInterval(() => {
-    // if (
-    //   documentData.value.length === 0 ||
-    //   documentData.value.some((item) => item.status === '0' || item.status === '2')
-    // ) {
-    //   getList(true)
-    // }
     getList(true)
   }, 6000)
 }
@@ -251,26 +354,39 @@ const closeInterval = () => {
     clearInterval(interval)
   }
 }
-function refreshDocument(row: any) {
-  if (row.type === '1') {
+
+function syncDocument(row: any) {
+  if (row.meta?.source_url) {
     MsgConfirm(`确认同步文档?`, `同步将删除已有数据重新获取新数据，请谨慎操作。`, {
       confirmButtonText: '同步',
       confirmButtonClass: 'danger'
     })
       .then(() => {
-        documentApi.putDocumentRefresh(row.dataset_id, row.id).then((res) => {
+        documentApi.putDocumentSync(row.dataset_id, row.id).then(() => {
           getList()
         })
       })
       .catch(() => {})
   } else {
-    documentApi.putDocumentRefresh(row.dataset_id, row.id).then((res) => {
-      getList()
+    MsgConfirm(`提示`, `无法同步，请先去设置文档 URL地址`, {
+      confirmButtonText: '确认',
+      type: 'warning'
     })
+      .then(() => {})
+      .catch(() => {})
   }
 }
+function refreshDocument(row: any) {
+  documentApi.putDocumentRefresh(row.dataset_id, row.id).then(() => {
+    getList()
+  })
+}
 
-function rowClickHandle(row: any) {
+function rowClickHandle(row: any, column: any) {
+  if (column && column.type === 'selection') {
+    return
+  }
+
   router.push({ path: `/dataset/${id}/${row.id}` })
 }
 
@@ -313,6 +429,7 @@ function deleteMulDocument() {
   })
   documentApi.delMulDocument(id, arr, loading).then(() => {
     MsgSuccess('批量删除成功')
+    multipleTableRef.value?.clearSelection()
     getList()
   })
 }
@@ -354,12 +471,12 @@ function changeState(bool: Boolean, row: any) {
   currentMouseId.value && updateData(row.id, obj, str)
 }
 
-function editName(val: string) {
+function editName(val: string, id: string) {
   if (val) {
     const obj = {
       name: val
     }
-    currentMouseId.value && updateData(currentMouseId.value, obj, '修改成功')
+    updateData(id, obj, '修改成功')
   } else {
     MsgError('文件名称不能为空！')
   }
@@ -378,13 +495,12 @@ function handleSizeChange() {
 }
 
 function getList(bool?: boolean) {
+  const param = {
+    ...(filterText.value && { name: filterText.value }),
+    ...(filterMethod.value && { hit_handling_method: filterMethod.value })
+  }
   documentApi
-    .getDocument(
-      id as string,
-      paginationConfig.value,
-      filterText.value && { name: filterText.value },
-      bool ? undefined : loading
-    )
+    .getDocument(id as string, paginationConfig.value, param, bool ? undefined : loading)
     .then((res) => {
       documentData.value = res.data.records
       paginationConfig.value.total = res.data.total
@@ -395,6 +511,11 @@ function getDetail() {
   dataset.asyncGetDatasetDetail(id, loading).then((res: any) => {
     datasetDetail.value = res.data
   })
+}
+
+function refreshMigrate() {
+  multipleTableRef.value?.clearSelection()
+  getList()
 }
 
 function refresh() {
@@ -408,7 +529,8 @@ onMounted(() => {
     paginationConfig.value = beforePagination.value
   }
   if (beforeSearch.value) {
-    filterText.value = beforeSearch.value
+    filterText.value = beforeSearch.value['filterText']
+    filterMethod.value = beforeSearch.value['filterMethod']
   }
   getList()
   // 初始化定时任务

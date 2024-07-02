@@ -1,13 +1,14 @@
 <template>
   <div class="dataset-list-container p-24" style="padding-top: 16px">
     <div class="flex-between mb-16">
-      <h3>知识库</h3>
+      <h4>知识库</h4>
       <el-input
         v-model="searchValue"
         @change="searchHandle"
         placeholder="按名称搜索"
         prefix-icon="Search"
         class="w-240"
+        clearable
       />
     </div>
     <div v-loading.fullscreen.lock="paginationConfig.current_page === 1 && loading">
@@ -74,10 +75,21 @@
                               v-if="item.type === '1'"
                               >同步</el-dropdown-item
                             >
+                            <el-dropdown-item @click="reEmbeddingDataset(item)">
+                              <AppIcon
+                                iconName="app-document-refresh"
+                                style="font-size: 16px"
+                              ></AppIcon>
+                              重新向量化</el-dropdown-item
+                            >
                             <el-dropdown-item
                               icon="Setting"
                               @click.stop="router.push({ path: `/dataset/${item.id}/setting` })"
-                              >设置</el-dropdown-item
+                            >
+                              设置</el-dropdown-item
+                            >
+                            <el-dropdown-item @click.stop="export_dataset(item)">
+                              <AppIcon iconName="app-export"></AppIcon>导出</el-dropdown-item
                             >
                             <el-dropdown-item icon="Delete" @click.stop="deleteDataset(item)"
                               >删除</el-dropdown-item
@@ -117,8 +129,14 @@ const paginationConfig = reactive({
 
 const searchValue = ref('')
 
-function refresh(row: any) {
+function refresh() {
   MsgSuccess('同步任务发送成功')
+}
+
+function reEmbeddingDataset(row: any) {
+  datasetApi.putReEmbeddingDataset(row.id).then(() => {
+    MsgSuccess('提交成功')
+  })
 }
 
 function syncDataset(row: any) {
@@ -129,6 +147,11 @@ function searchHandle() {
   paginationConfig.current_page = 1
   datasetList.value = []
   getList()
+}
+const export_dataset = (item: any) => {
+  datasetApi.exportDataset(item.name, item.id, loading).then((ok) => {
+    MsgSuccess('导出成功')
+  })
 }
 
 function deleteDataset(row: any) {

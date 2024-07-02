@@ -18,7 +18,8 @@ from dataset.models import Paragraph
 class ParagraphPipelineModel:
 
     def __init__(self, _id: str, document_id: str, dataset_id: str, content: str, title: str, status: str,
-                 is_active: bool, comprehensive_score: float, similarity: float, dataset_name: str, document_name: str):
+                 is_active: bool, comprehensive_score: float, similarity: float, dataset_name: str, document_name: str,
+                 hit_handling_method: str, directly_return_similarity: float):
         self.id = _id
         self.document_id = document_id
         self.dataset_id = dataset_id
@@ -30,6 +31,8 @@ class ParagraphPipelineModel:
         self.similarity = similarity
         self.dataset_name = dataset_name
         self.document_name = document_name
+        self.hit_handling_method = hit_handling_method
+        self.directly_return_similarity = directly_return_similarity
 
     def to_dict(self):
         return {
@@ -53,6 +56,8 @@ class ParagraphPipelineModel:
             self.comprehensive_score = None
             self.document_name = None
             self.dataset_name = None
+            self.hit_handling_method = None
+            self.directly_return_similarity = 0.9
 
         def add_paragraph(self, paragraph):
             if isinstance(paragraph, Paragraph):
@@ -76,6 +81,14 @@ class ParagraphPipelineModel:
             self.document_name = document_name
             return self
 
+        def add_hit_handling_method(self, hit_handling_method):
+            self.hit_handling_method = hit_handling_method
+            return self
+
+        def add_directly_return_similarity(self, directly_return_similarity):
+            self.directly_return_similarity = directly_return_similarity
+            return self
+
         def add_comprehensive_score(self, comprehensive_score: float):
             self.comprehensive_score = comprehensive_score
             return self
@@ -91,7 +104,7 @@ class ParagraphPipelineModel:
                                           self.paragraph.get('status'),
                                           self.paragraph.get('is_active'),
                                           self.comprehensive_score, self.similarity, self.dataset_name,
-                                          self.document_name)
+                                          self.document_name, self.hit_handling_method, self.directly_return_similarity)
 
 
 class IBaseChatPipelineStep:

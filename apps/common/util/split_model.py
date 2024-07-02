@@ -163,7 +163,7 @@ def parse_level(text, pattern: str):
     :param pattern:  正则
     :return: 符合正则的文本
     """
-    level_content_list = list(map(to_tree_obj, re_findall(pattern, text)))
+    level_content_list = list(map(to_tree_obj, [r[0:255] for r in re_findall(pattern, text) if r is not None]))
     return list(map(filter_special_symbol, level_content_list))
 
 
@@ -257,7 +257,7 @@ def post_handler_paragraph(content: str, limit: int, with_filter: bool):
 
 replace_map = {
     re.compile('\n+'): '\n',
-    re.compile('\\s+'): ' ',
+    re.compile(' +'): ' ',
     re.compile('#+'): "",
     re.compile("\t+"): ''
 }
@@ -335,7 +335,9 @@ class SplitModel:
         :param text: 文本数据
         :return: 解析后数据 {content:段落数据,keywords:[‘段落关键词’],parent_chain:['段落父级链路']}
         """
+        text = text.replace('\r\n', '\n')
         text = text.replace('\r', '\n')
+        text = text.replace("\0", '')
         result_tree = self.parse_to_tree(text, 0)
         result = result_tree_to_paragraph(result_tree, [], [])
         return [item for item in [self.post_reset_paragraph(row) for row in result] if

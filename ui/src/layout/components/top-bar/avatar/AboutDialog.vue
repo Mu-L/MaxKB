@@ -1,11 +1,8 @@
 <template>
-  <el-dialog v-model="aboutDialogVisible" class="about-dialog">
+  <el-dialog v-model="aboutDialogVisible" class="about-dialog border-r-4">
     <template #header="{ titleId, titleClass }">
-      <div class="flex-center">
-        <div class="logo mr-4"></div>
-        <div class="app-logo-font about-title" :id="titleId" :class="titleClass">
-          {{ defaultTitle }}
-        </div>
+      <div class="logo flex-center" :id="titleId" :class="titleClass">
+        <img src="@/assets/MaxKB-logo.svg" height="59" />
       </div>
     </template>
     <div class="about-ui">
@@ -16,23 +13,23 @@
       >
         <div class="flex align-center cursor">
           <AppIcon iconName="app-reading" class="mr-16 ml-8" style="font-size: 24px"></AppIcon>
-          <span>用户手册</span>
+          <span>{{ $t('layout.topbar.wiki') }}</span>
         </div>
       </el-card>
       <el-card shadow="hover" class="mb-16" @click="toUrl('https://github.com/1Panel-dev/MaxKB')">
         <div class="flex align-center cursor">
           <AppIcon iconName="app-github" class="mr-16 ml-8" style="font-size: 24px"></AppIcon>
-          <span>项目地址</span>
+          <span>{{ $t('layout.topbar.github') }}</span>
         </div>
       </el-card>
       <el-card shadow="hover" class="mb-16" @click="toUrl('https://bbs.fit2cloud.com/c/mk/11')">
         <div class="flex align-center cursor">
           <AppIcon iconName="app-help" class="mr-16 ml-8" style="font-size: 24px"></AppIcon>
-          <span>论坛求助</span>
+          <span>{{ $t('layout.topbar.forum') }}</span>
         </div>
       </el-card>
     </div>
-    <div class="text-center">版本号：{{ version }}</div>
+    <div class="text-center">{{ $t('layout.topbar.avatar.version') }}:{{ user.version }}</div>
   </el-dialog>
 </template>
 <script setup lang="ts">
@@ -41,7 +38,6 @@ import useStore from '@/stores'
 const defaultTitle = import.meta.env.VITE_APP_TITLE
 
 const { user } = useStore()
-const version = user.version
 
 const aboutDialogVisible = ref(false)
 
@@ -58,27 +54,18 @@ defineExpose({ open })
 <style lang="scss" scope>
 .about-dialog {
   padding: 0 0 24px 0;
-  border-radius: 4px;
   width: 600px;
   font-weight: 400;
   .el-dialog__header {
     background: var(--app-header-bg-color);
     margin-right: 0;
     height: 140px;
-    border-radius: 4px 4px 0 0;
     box-sizing: border-box;
+    border-radius: 4px 4px 0 0;
   }
   .el-dialog__title {
-    line-height: 140px;
-  }
-  .about-title {
-    font-size: 40px;
-  }
-  .logo {
-    background-image: url('@/assets/logo.png');
-    background-size: 100% 100%;
-    width: 59px;
-    height: 59px;
+    height: 140px;
+    box-sizing: border-box;
   }
   .about-ui {
     width: 360px;

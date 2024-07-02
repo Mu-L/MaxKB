@@ -7,6 +7,8 @@ declare module 'markdown-it-footnote'
 declare module 'markdown-it-sub'
 declare module 'markdown-it-sup'
 declare module 'markdown-it-toc-done-right'
+declare module 'katex'
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+declare type Recordable<T = any> = Record<string, T>;

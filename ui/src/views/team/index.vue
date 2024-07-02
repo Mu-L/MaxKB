@@ -9,7 +9,12 @@
           </el-button>
         </div>
         <div class="team-member-input">
-          <el-input v-model="filterText" placeholder="请输入用户名搜索" prefix-icon="Search" />
+          <el-input
+            v-model="filterText"
+            placeholder="请输入用户名搜索"
+            prefix-icon="Search"
+            clearable
+          />
         </div>
         <common-list
           :data="filterMember"
@@ -77,7 +82,7 @@ import type { TeamMember } from '@/api/type/team'
 import CreateMemberDialog from './component/CreateMemberDialog.vue'
 import PermissionSetting from './component/PermissionSetting.vue'
 import { MsgSuccess, MsgConfirm } from '@/utils/message'
-import { DATASET, APPLICATION, isManage } from './utils'
+import { TeamEnum } from '@/enums/team'
 
 const CreateMemberRef = ref<InstanceType<typeof CreateMemberDialog>>()
 const loading = ref(false)
@@ -89,18 +94,18 @@ const currentType = ref<String>('')
 
 const filterText = ref('')
 
-const activeName = ref(DATASET)
+const activeName = ref(TeamEnum.DATASET)
 const tableHeight = ref(0)
 
 const settingTags = reactive([
   {
     label: '知识库',
-    value: DATASET,
+    value: TeamEnum.DATASET,
     data: [] as any
   },
   {
     label: '应用',
-    value: APPLICATION,
+    value: TeamEnum.APPLICATION,
     data: [] as any
   }
 ])
@@ -112,6 +117,10 @@ watch(filterText, (val) => {
     filterMember.value = memberList.value
   }
 })
+
+function isManage(type: String) {
+  return type === 'manage'
+}
 
 function submitPermissions() {
   rLoading.value = true

@@ -1,8 +1,8 @@
 <template>
   <div ref="aiChatRef" class="ai-chat" :class="log ? 'chart-log' : ''">
     <el-scrollbar ref="scrollDiv" @scroll="handleScrollTop">
-      <div ref="dialogScrollbar" class="ai-chat__content p-24">
-        <div class="item-content mb-16" v-if="!props.available || props.data?.prologue">
+      <div ref="dialogScrollbar" class="ai-chat__content p-24 chat-width">
+        <div class="item-content mb-16" v-if="!props.available || (props.data?.prologue && !log)">
           <div class="avatar">
             <AppAvatar class="avatar-gradient">
               <img src="@/assets/icon_robot.svg" style="width: 75%" alt="" />
@@ -27,6 +27,8 @@
                   ref="editorRef"
                   editorId="preview-only"
                   :modelValue="item.str"
+                  noIconfont
+                  no-mermaid
                 />
               </template>
             </el-card>
@@ -53,6 +55,7 @@
                 <img src="@/assets/icon_robot.svg" style="width: 75%" alt="" />
               </AppAvatar>
             </div>
+
             <div class="content">
               <div class="flex" v-if="!item.answer_text">
                 <el-card
@@ -60,7 +63,16 @@
                   shadow="always"
                   class="dialog-card"
                 >
-                  抱歉，没有查找到相关内容，请重新描述您的问题或提供更多信息。
+                  <MdRenderer
+                    source=" 抱歉，没有查找到相关内容，请重新描述您的问题或提供更多信息。"
+                  ></MdRenderer>
+                  <!-- 知识来源 -->
+                  <div v-if="showSource(item)">
+                    <KnowledgeSource :data="item" :type="props.data.type" />
+                  </div>
+                </el-card>
+                <el-card v-else-if="item.is_stop" shadow="always" class="dialog-card">
+                  已停止回答
                 </el-card>
                 <el-card v-else shadow="always" class="dialog-card">
                   回答中 <span class="dotting"></span>
@@ -69,39 +81,9 @@
 
               <el-card v-else shadow="always" class="dialog-card">
                 <MdRenderer :source="item.answer_text"></MdRenderer>
-                <div v-if="(id && !props.appId && item.write_ed) || log">
-                  <el-divider> <el-text type="info">知识来源</el-text> </el-divider>
-                  <div class="mb-8">
-                    <el-space wrap>
-                      <el-button
-                        v-for="(dataset, index) in item.dataset_list"
-                        :key="index"
-                        type="primary"
-                        plain
-                        size="small"
-                        @click="openParagraph(item, dataset.id)"
-                        >{{ dataset.name }}</el-button
-                      >
-                    </el-space>
-                  </div>
-
-                  <div>
-                    <el-button
-                      class="mr-8"
-                      type="primary"
-                      plain
-                      size="small"
-                      @click="openParagraph(item)"
-                      :disabled="!item.paragraph_list || item.paragraph_list?.length === 0"
-                      >引用分段：{{ item.paragraph_list?.length || 0 }}</el-button
-                    >
-                    <el-tag type="info" effect="plain">
-                      消耗 tokens: {{ item?.message_tokens + item?.answer_tokens }}
-                    </el-tag>
-                    <el-tag class="ml-8" type="info" effect="plain">
-                      耗时: {{ item.run_time?.toFixed(2) }} s
-                    </el-tag>
-                  </div>
+                <!-- 知识来源 -->
+                <div v-if="showSource(item)">
+                  <KnowledgeSource :data="item" :type="props.data.type" />
                 </div>
               </el-card>
               <div class="flex-between mt-8" v-if="log">
@@ -121,15 +103,15 @@
                     >停止回答</el-button
                   >
                 </div>
-
-                <div v-if="item.write_ed && props.appId">
-                  <OperationButton
-                    :data="item"
-                    :applicationId="appId"
-                    :chartId="chartOpenId"
-                    @regeneration="regenerationChart(item)"
-                  />
-                </div>
+              </div>
+              <div v-if="item.write_ed && props.appId" class="flex-between">
+                <OperationButton
+                  :data="item"
+                  :applicationId="appId"
+                  :chatId="chartOpenId"
+                  :chat_loading="loading"
+                  @regeneration="regenerationChart(item)"
+                />
               </div>
             </div>
           </div>
@@ -137,13 +119,15 @@
       </div>
     </el-scrollbar>
     <div class="ai-chat__operate p-24" v-if="!log">
-      <div class="operate-textarea flex">
+      <slot name="operateBefore" />
+      <div class="operate-textarea flex chat-width">
         <el-input
           ref="quickInputRef"
           v-model="inputValue"
           placeholder="请输入"
-          :rows="1"
+          :autosize="{ minRows: 1, maxRows: isMobile ? 4 : 10 }"
           type="textarea"
+          :maxlength="100000"
           @keydown.enter="sendChatHandle($event)"
         />
         <div class="operate">
@@ -163,29 +147,27 @@
         </div>
       </div>
     </div>
-    <!-- 知识库引用 dialog -->
-    <ParagraphSourceDialog ref="ParagraphSourceDialogRef" />
   </div>
 </template>
 <script setup lang="ts">
-import { ref, nextTick, computed, watch, reactive } from 'vue'
+import { ref, nextTick, computed, watch, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import LogOperationButton from './LogOperationButton.vue'
 import OperationButton from './OperationButton.vue'
-import ParagraphSourceDialog from './ParagraphSourceDialog.vue'
+import KnowledgeSource from './KnowledgeSource.vue'
 import applicationApi from '@/api/application'
 import logApi from '@/api/log'
 import { ChatManagement, type chatType } from '@/api/type/application'
 import { randomId } from '@/utils/utils'
 import useStore from '@/stores'
-import MdRenderer from '@/components/markdown-renderer/MdRenderer.vue'
-import { MdPreview } from 'md-editor-v3'
-import { MsgError } from '@/utils/message'
+import MdRenderer from '@/components/markdown/MdRenderer.vue'
+import { isWorkFlow } from '@/utils/application'
 import { debounce } from 'lodash'
 defineOptions({ name: 'AiChat' })
 const route = useRoute()
 const {
-  params: { accessToken, id }
+  params: { accessToken, id },
+  query: { mode }
 } = route as any
 const props = defineProps({
   data: {
@@ -202,11 +184,21 @@ const props = defineProps({
   available: {
     type: Boolean,
     default: true
-  }
+  },
+  chatId: {
+    type: String,
+    default: ''
+  } // 历史记录Id
 })
-const { application } = useStore()
 
-const ParagraphSourceDialogRef = ref()
+const emit = defineEmits(['refresh', 'scroll'])
+
+const { application, common } = useStore()
+
+const isMobile = computed(() => {
+  return common.isMobile() || mode === 'embed'
+})
+
 const aiChatRef = ref()
 const quickInputRef = ref()
 const scrollDiv = ref()
@@ -217,30 +209,55 @@ const chartOpenId = ref('')
 const chatList = ref<any[]>([])
 
 const isDisabledChart = computed(
-  () => !(inputValue.value && (props.appId || (props.data?.name && props.data?.model_id)))
+  () => !(inputValue.value.trim() && (props.appId || props.data?.name))
 )
 const isMdArray = (val: string) => val.match(/^-\s.*/m)
 const prologueList = computed(() => {
   const temp = props.available
     ? props.data?.prologue
     : '抱歉，当前正在维护，无法提供服务，请稍后再试！'
-  let arr: any = []
   const lines = temp?.split('\n')
-  lines?.forEach((str: string, index: number) => {
-    if (isMdArray(str)) {
-      arr[index] = {
-        type: 'question',
-        str: str.replace(/^-\s+/, '')
+  return lines
+    .reduce((pre_array: Array<any>, current: string, index: number) => {
+      const currentObj = isMdArray(current)
+        ? {
+            type: 'question',
+            str: current.replace(/^-\s+/, ''),
+            index: index
+          }
+        : {
+            type: 'md',
+            str: current,
+            index: index
+          }
+      if (pre_array.length > 0) {
+        const pre = pre_array[pre_array.length - 1]
+        if (!isMdArray(current) && pre.type == 'md') {
+          pre.str = [pre.str, current].join('\n')
+          pre.index = index
+          return pre_array
+        } else {
+          pre_array.push(currentObj)
+        }
+      } else {
+        pre_array.push(currentObj)
       }
-    } else {
-      arr[index] = {
-        type: 'md',
-        str
-      }
-    }
-  })
-  return arr
+      return pre_array
+    }, [])
+    .sort((pre: any, next: any) => pre.index - next.index)
 })
+
+watch(
+  () => props.chatId,
+  (val) => {
+    if (val && val !== 'new') {
+      chartOpenId.value = val
+    } else {
+      chartOpenId.value = ''
+    }
+  },
+  { deep: true }
+)
 
 watch(
   () => props.data,
@@ -253,26 +270,27 @@ watch(
 watch(
   () => props.record,
   (value) => {
-    if (props.log) {
-      chatList.value = value
-    }
+    chatList.value = value
   },
   {
     immediate: true
   }
 )
 
-function openParagraph(row: any, id?: string) {
-  ParagraphSourceDialogRef.value.open(row, id)
+function showSource(row: any) {
+  if (props.log) {
+    return true
+  } else if (row.write_ed) {
+    if (id || props.data?.show_source) {
+      return true
+    }
+  } else {
+    return false
+  }
 }
 
 function quickProblemHandle(val: string) {
-  if (!props.log && !loading.value) {
-    // inputValue.value = val
-    // nextTick(() => {
-    //   quickInputRef.value?.focus()
-    // })
-
+  if (!loading.value && props.data?.name) {
     handleDebounceClick(val)
   }
 }
@@ -286,7 +304,9 @@ function sendChatHandle(event: any) {
     // 如果没有按下组合键ctrl，则会阻止默认事件
     event.preventDefault()
     if (!isDisabledChart.value && !loading.value && !event.isComposing) {
-      chatMessage()
+      if (inputValue.value.trim()) {
+        chatMessage()
+      }
     }
   } else {
     // 如果同时按下ctrl+回车键，则会换行
@@ -315,7 +335,7 @@ function getChartOpenId(chat?: any) {
       .catch((res) => {
         if (res.response.status === 403) {
           application.asyncAppAuthentication(accessToken).then(() => {
-            getChartOpenId()
+            getChartOpenId(chat)
           })
         } else {
           loading.value = false
@@ -323,16 +343,32 @@ function getChartOpenId(chat?: any) {
         }
       })
   } else {
-    return applicationApi
-      .postChatOpen(obj)
-      .then((res) => {
-        chartOpenId.value = res.data
-        chatMessage(chat)
-      })
-      .catch((res) => {
-        loading.value = false
-        return Promise.reject(res)
-      })
+    if (isWorkFlow(obj.type)) {
+      const submitObj = {
+        work_flow: obj.work_flow
+      }
+      return applicationApi
+        .postWorkflowChatOpen(submitObj)
+        .then((res) => {
+          chartOpenId.value = res.data
+          chatMessage(chat)
+        })
+        .catch((res) => {
+          loading.value = false
+          return Promise.reject(res)
+        })
+    } else {
+      return applicationApi
+        .postChatOpen(obj)
+        .then((res) => {
+          chartOpenId.value = res.data
+          chatMessage(chat)
+        })
+        .catch((res) => {
+          loading.value = false
+          return Promise.reject(res)
+        })
+    }
   }
 }
 /**
@@ -358,18 +394,19 @@ const getWrite = (chat: any, reader: any, stream: boolean) => {
       let str = decoder.decode(value, { stream: true })
       // 这里解释一下 start 因为数据流返回流并不是按照后端chunk返回 我们希望得到的chunk是data:{xxx}\n\n 但是它获取到的可能是 data:{ -> xxx}\n\n 总而言之就是 fetch不能保证每个chunk都说以data:开始 \n\n结束
       tempResult += str
-      if (tempResult.endsWith('\n\n')) {
-        str = tempResult
-        tempResult = ''
+      const split = tempResult.match(/data:.*}\n\n/g)
+      if (split) {
+        str = split.join('')
+        tempResult = tempResult.replace(str, '')
       } else {
         return reader.read().then(write_stream)
       }
       // 这里解释一下 end
       if (str && str.startsWith('data:')) {
-        const split = str.match(/data:.*}\n\n/g)
         if (split) {
           for (const index in split) {
             const chunk = JSON?.parse(split[index].replace('data:', ''))
+            chat.chat_id = chunk.chat_id
             chat.record_id = chunk.id
             const content = chunk?.content
             if (content) {
@@ -423,7 +460,7 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean) {
   if (!chat) {
     chat = reactive({
       id: randomId(),
-      problem_text: problem ? problem : inputValue.value,
+      problem_text: problem ? problem : inputValue.value.trim(),
       answer_text: '',
       buffer: [],
       write_ed: false,
@@ -432,6 +469,8 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean) {
       vote_status: '-1'
     })
     chatList.value.push(chat)
+    ChatManagement.addChatRecord(chat, 50, loading)
+    ChatManagement.write(chat.id)
     inputValue.value = ''
     nextTick(() => {
       // 将滚动条滚动到最下面
@@ -439,7 +478,7 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean) {
     })
   }
   if (!chartOpenId.value) {
-    getChartOpenId(chat).catch((e) => {
+    getChartOpenId(chat).catch(() => {
       errorWrite(chat)
     })
   } else {
@@ -455,9 +494,9 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean) {
           application
             .asyncAppAuthentication(accessToken)
             .then(() => {
-              chatMessage(chat)
+              chatMessage(chat, problem)
             })
-            .catch((err) => {
+            .catch(() => {
               errorWrite(chat)
             })
         } else if (response.status === 460) {
@@ -469,8 +508,6 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean) {
             // 将滚动条滚动到最下面
             scrollDiv.value.setScrollTop(getMaxHeight())
           })
-          ChatManagement.addChatRecord(chat, 50, loading)
-          ChatManagement.write(chat.id)
           const reader = response.body.getReader()
           // 处理流数据
           const write = getWrite(
@@ -482,7 +519,11 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean) {
         }
       })
       .then(() => {
-        return !props.appId && getSourceDetail(chat)
+        if (props.chatId === 'new') {
+          emit('refresh', chartOpenId.value)
+        }
+        quickInputRef.value.textareaStyle.height = '45px'
+        return (id || props.data?.show_source) && getSourceDetail(chat)
       })
       .finally(() => {
         ChatManagement.close(chat.id)
@@ -495,11 +536,13 @@ function chatMessage(chat?: any, problem?: string, re_chat?: boolean) {
 
 function regenerationChart(item: chatType) {
   inputValue.value = item.problem_text
-  chatMessage(null, '', true)
+  if (!loading.value) {
+    chatMessage(null, '', true)
+  }
 }
 
 function getSourceDetail(row: any) {
-  logApi.getRecordDetail(id, chartOpenId.value, row.record_id, loading).then((res) => {
+  logApi.getRecordDetail(id || props.appId, row.chat_id, row.record_id, loading).then((res) => {
     const exclude_keys = ['answer_text', 'id']
     Object.keys(res.data).forEach((key) => {
       if (!exclude_keys.includes(key)) {
@@ -530,6 +573,7 @@ const handleScrollTop = ($event: any) => {
   } else {
     scorll.value = false
   }
+  emit('scroll', { ...$event, dialogScrollbar: dialogScrollbar.value, scrollDiv: scrollDiv.value })
 }
 
 const handleScroll = () => {
@@ -544,6 +588,11 @@ const handleScroll = () => {
   }
 }
 
+function setScrollBottom() {
+  // 将滚动条滚动到最下面
+  scrollDiv.value.setScrollTop(getMaxHeight())
+}
+
 watch(
   chatList,
   () => {
@@ -551,6 +600,18 @@ watch(
   },
   { deep: true, immediate: true }
 )
+
+onMounted(() => {
+  setTimeout(() => {
+    if (quickInputRef.value) {
+      quickInputRef.value.textarea.style.height = '0'
+    }
+  }, 1500)
+})
+
+defineExpose({
+  setScrollBottom
+})
 </script>
 <style lang="scss" scoped>
 .ai-chat {
@@ -562,14 +623,9 @@ watch(
   position: relative;
   color: var(--app-text-color);
   box-sizing: border-box;
-  &.chart-log {
-    .ai-chat__content {
-      padding-bottom: 0;
-    }
-  }
+
   &__content {
     padding-top: 0;
-    padding-bottom: 96px;
     box-sizing: border-box;
 
     .avatar {
@@ -611,9 +667,7 @@ watch(
   }
   &__operate {
     background: #f3f7f9;
-    position: absolute;
-    bottom: 0;
-    left: 0;
+    position: relative;
     width: 100%;
     box-sizing: border-box;
     z-index: 10;
@@ -666,5 +720,9 @@ watch(
     border: none;
     border-radius: 8px;
   }
+}
+.chat-width {
+  max-width: var(--app-chat-width, 860px);
+  margin: 0 auto;
 }
 </style>

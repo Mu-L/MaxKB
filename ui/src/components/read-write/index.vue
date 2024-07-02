@@ -1,12 +1,17 @@
 <template>
   <div class="cursor w-full">
     <slot name="read">
-      <div class="flex align-center" v-if="!isEdit">
+      <div class="flex align-center" v-if="!isEdit" @dblclick="dblclick">
         <auto-tooltip :content="data">
           {{ data }}
         </auto-tooltip>
 
-        <el-button class="ml-4" @click.stop="editNameHandle" text v-if="showEditIcon">
+        <el-button
+          v-if="trigger === 'default' && showEditIcon"
+          class="ml-4"
+          @click.stop="editNameHandle"
+          text
+        >
           <el-icon><EditPen /></el-icon>
         </el-button>
       </div>
@@ -21,11 +26,14 @@
             autofocus
             :maxlength="maxlength || '-'"
             :show-word-limit="maxlength ? true : false"
+            @blur="isEdit = false"
+            @keyup.enter="submit"
+            clearable
           ></el-input>
         </div>
 
         <span class="ml-4">
-          <el-button type="primary" text @click.stop="submit" :disabled="loading">
+          <el-button type="primary" text @mousedown="submit" :disabled="loading">
             <el-icon><Select /></el-icon>
           </el-button>
         </span>
@@ -53,6 +61,11 @@ const props = defineProps({
   maxlength: {
     type: Number,
     default: () => 0
+  },
+  trigger: {
+    type: String,
+    default: 'default',
+    validator: (value: string) => ['default', 'dblclick'].includes(value)
   }
 })
 const emit = defineEmits(['change'])
@@ -64,8 +77,18 @@ const loading = ref(false)
 watch(isEdit, (bool) => {
   if (!bool) {
     writeValue.value = ''
+  } else {
+    nextTick(() => {
+      inputRef.value?.focus()
+    })
   }
 })
+
+function dblclick() {
+  if (props.trigger === 'dblclick') {
+    editNameHandle()
+  }
+}
 
 function submit() {
   loading.value = true
@@ -80,10 +103,6 @@ function editNameHandle() {
   isEdit.value = true
 }
 
-onMounted(() => {
-  nextTick(() => {
-    inputRef.value?.focus()
-  })
-})
+onMounted(() => {})
 </script>
 <style lang="scss" scoped></style>

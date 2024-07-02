@@ -13,7 +13,8 @@ from rest_framework.views import APIView
 
 from application.serializers.chat_message_serializers import ChatMessageSerializer
 from application.serializers.chat_serializers import ChatSerializers, ChatRecordSerializer
-from application.swagger_api.chat_api import ChatApi, VoteApi, ChatRecordApi, ImproveApi, ChatRecordImproveApi
+from application.swagger_api.chat_api import ChatApi, VoteApi, ChatRecordApi, ImproveApi, ChatRecordImproveApi, \
+    ChatClientHistoryApi
 from common.auth import TokenAuth, has_permissions
 from common.constants.authentication_type import AuthenticationType
 from common.constants.permission_constants import Permission, Group, Operate, \
@@ -62,6 +63,18 @@ class ChatView(APIView):
         def get(self, request: Request, application_id: str):
             return result.success(ChatSerializers.OpenChat(
                 data={'user_id': request.user.id, 'application_id': application_id}).open())
+
+    class OpenWorkFlowTemp(APIView):
+        authentication_classes = [TokenAuth]
+
+        @action(methods=['POST'], detail=False)
+        @swagger_auto_schema(operation_summary="获取工作流临时会话id",
+                             operation_id="获取工作流临时会话id",
+                             request_body=ChatApi.OpenWorkFlowTemp.get_request_body_api(),
+                             tags=["应用/会话"])
+        def post(self, request: Request):
+            return result.success(ChatSerializers.OpenWorkFlowChat(
+                data={**request.data, 'user_id': request.user.id}).open())
 
     class OpenTemp(APIView):
         authentication_classes = [TokenAuth]
@@ -137,6 +150,47 @@ class ChatView(APIView):
                     data={'application_id': application_id, 'user_id': request.user.id,
                           'chat_id': chat_id}).delete())
 
+    class ClientChatHistoryPage(APIView):
+        authentication_classes = [TokenAuth]
+
+        @action(methods=['GET'], detail=False)
+        @swagger_auto_schema(operation_summary="分页获取客户端对话列表",
+                             operation_id="分页获取客户端对话列表",
+                             manual_parameters=result.get_page_request_params(
+                                 ChatClientHistoryApi.get_request_params_api()),
+                             responses=result.get_page_api_response(ChatApi.get_response_body_api()),
+                             tags=["应用/对话日志"]
+                             )
+        @has_permissions(
+            ViewPermission([RoleConstants.APPLICATION_ACCESS_TOKEN],
+                           [lambda r, keywords: Permission(group=Group.APPLICATION, operate=Operate.USE,
+                                                           dynamic_tag=keywords.get('application_id'))])
+        )
+        def get(self, request: Request, application_id: str, current_page: int, page_size: int):
+            return result.success(ChatSerializers.ClientChatHistory(
+                data={'client_id': request.auth.client_id, 'application_id': application_id}).page(
+                current_page=current_page,
+                page_size=page_size))
+
+        class Operate(APIView):
+            authentication_classes = [TokenAuth]
+
+            @action(methods=['DELETE'], detail=False)
+            @swagger_auto_schema(operation_summary="客户端删除对话",
+                                 operation_id="客户端删除对话",
+                                 tags=["应用/对话日志"])
+            @has_permissions(ViewPermission(
+                [RoleConstants.APPLICATION_ACCESS_TOKEN],
+                [lambda r, keywords: Permission(group=Group.APPLICATION, operate=Operate.USE,
+                                                dynamic_tag=keywords.get('application_id'))],
+                compare=CompareConstants.AND),
+                compare=CompareConstants.AND)
+            def delete(self, request: Request, application_id: str, chat_id: str):
+                return result.success(
+                    ChatSerializers.Operate(
+                        data={'application_id': application_id, 'user_id': request.user.id,
+                              'chat_id': chat_id}).logic_delete())
+
     class Page(APIView):
         authentication_classes = [TokenAuth]
 
@@ -172,7 +226,8 @@ class ChatView(APIView):
                                  tags=["应用/对话日志"]
                                  )
             @has_permissions(
-                ViewPermission([RoleConstants.ADMIN, RoleConstants.USER, RoleConstants.APPLICATION_KEY],
+                ViewPermission([RoleConstants.ADMIN, RoleConstants.USER, RoleConstants.APPLICATION_KEY,
+                                RoleConstants.APPLICATION_ACCESS_TOKEN],
                                [lambda r, keywords: Permission(group=Group.APPLICATION, operate=Operate.USE,
                                                                dynamic_tag=keywords.get('application_id'))])
             )
@@ -180,7 +235,7 @@ class ChatView(APIView):
                 return result.success(ChatRecordSerializer.Operate(
                     data={'application_id': application_id,
                           'chat_id': chat_id,
-                          'chat_record_id': chat_record_id}).one())
+                          'chat_record_id': chat_record_id}).one(request.auth.current_role))
 
         @action(methods=['GET'], detail=False)
         @swagger_auto_schema(operation_summary="获取对话记录列表",
@@ -197,7 +252,7 @@ class ChatView(APIView):
         def get(self, request: Request, application_id: str, chat_id: str):
             return result.success(ChatRecordSerializer.Query(
                 data={'application_id': application_id,
-                      'chat_id': chat_id}).list())
+                      'chat_id': chat_id, 'order_asc': request.query_params.get('order_asc')}).list())
 
         class Page(APIView):
             authentication_classes = [TokenAuth]
@@ -218,7 +273,8 @@ class ChatView(APIView):
             def get(self, request: Request, application_id: str, chat_id: str, current_page: int, page_size: int):
                 return result.success(ChatRecordSerializer.Query(
                     data={'application_id': application_id,
-                          'chat_id': chat_id}).page(current_page, page_size))
+                          'chat_id': chat_id, 'order_asc': request.query_params.get('order_asc')}).page(current_page,
+                                                                                                        page_size))
 
         class Vote(APIView):
             authentication_classes = [TokenAuth]

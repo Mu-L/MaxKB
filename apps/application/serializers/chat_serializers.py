@@ -22,10 +22,14 @@ from django.db.models import QuerySet, Q
 from django.http import HttpResponse
 from rest_framework import serializers
 
-from application.models import Chat, Application, ApplicationDatasetMapping, VoteChoices, ChatRecord
+from application.flow.workflow_manage import Flow
+from application.models import Chat, Application, ApplicationDatasetMapping, VoteChoices, ChatRecord, WorkFlowVersion, \
+    ApplicationTypeChoices
+from application.models.api_key_model import ApplicationAccessToken
 from application.serializers.application_serializers import ModelDatasetAssociation, DatasetSettingSerializer, \
     ModelSettingSerializer
 from application.serializers.chat_message_serializers import ChatInfo
+from common.constants.permission_constants import RoleConstants
 from common.db.search import native_search, native_page_search, page_search, get_dynamics_model
 from common.event import ListenerManagement
 from common.exception.app_exception import AppApiException
@@ -33,7 +37,7 @@ from common.util.common import post
 from common.util.field_message import ErrMessage
 from common.util.file_util import get_file_content
 from common.util.lock import try_lock, un_lock
-from common.util.rsa_util import decrypt
+from common.util.rsa_util import rsa_long_decrypt
 from dataset.models import Document, Problem, Paragraph, ProblemParagraphMapping
 from dataset.serializers.paragraph_serializers import ParagraphSerializers
 from setting.models import Model
@@ -43,16 +47,41 @@ from smartdoc.conf import PROJECT_DIR
 chat_cache = caches['model_cache']
 
 
+class WorkFlowSerializers(serializers.Serializer):
+    nodes = serializers.ListSerializer(child=serializers.DictField(), error_messages=ErrMessage.uuid("节点"))
+    edges = serializers.ListSerializer(child=serializers.DictField(), error_messages=ErrMessage.uuid("连线"))
+
+
 class ChatSerializers(serializers.Serializer):
     class Operate(serializers.Serializer):
         chat_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("对话id"))
         application_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("应用id"))
+
+        def logic_delete(self, with_valid=True):
+            if with_valid:
+                self.is_valid(raise_exception=True)
+            QuerySet(Chat).filter(id=self.data.get('chat_id'), application_id=self.data.get('application_id')).update(
+                is_deleted=True)
+            return True
 
         def delete(self, with_valid=True):
             if with_valid:
                 self.is_valid(raise_exception=True)
             QuerySet(Chat).filter(id=self.data.get('chat_id'), application_id=self.data.get('application_id')).delete()
             return True
+
+    class ClientChatHistory(serializers.Serializer):
+        application_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("应用id"))
+        client_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("客户端id"))
+
+        def page(self, current_page: int, page_size: int, with_valid=True):
+            if with_valid:
+                self.is_valid(raise_exception=True)
+            queryset = QuerySet(Chat).filter(client_id=self.data.get('client_id'),
+                                             application_id=self.data.get('application_id'),
+                                             is_deleted=False)
+            queryset = queryset.order_by('-create_time')
+            return page_search(current_page, page_size, queryset, lambda row: ChatSerializerModel(row).data)
 
     class Query(serializers.Serializer):
         abstract = serializers.CharField(required=False, error_messages=ErrMessage.char("摘要"))
@@ -185,6 +214,27 @@ class ChatSerializers(serializers.Serializer):
             self.is_valid(raise_exception=True)
             application_id = self.data.get('application_id')
             application = QuerySet(Application).get(id=application_id)
+            if application.type == ApplicationTypeChoices.SIMPLE:
+                return self.open_simple(application)
+            else:
+                return self.open_work_flow(application)
+
+        def open_work_flow(self, application):
+            self.is_valid(raise_exception=True)
+            application_id = self.data.get('application_id')
+            chat_id = str(uuid.uuid1())
+            work_flow_version = QuerySet(WorkFlowVersion).filter(application_id=application_id).order_by(
+                '-create_time')[0:1].first()
+            if work_flow_version is None:
+                raise AppApiException(500, "应用未发布,请发布后再使用")
+            chat_cache.set(chat_id,
+                           ChatInfo(chat_id, None, [],
+                                    [],
+                                    application, work_flow_version), timeout=60 * 30)
+            return chat_id
+
+        def open_simple(self, application):
+            application_id = self.data.get('application_id')
             model = QuerySet(Model).filter(id=application.model_id).first()
             dataset_id_list = [str(row.dataset_id) for row in
                                QuerySet(ApplicationDatasetMapping).filter(
@@ -193,7 +243,8 @@ class ChatSerializers(serializers.Serializer):
             if model is not None:
                 chat_model = ModelProvideConstants[model.provider].value.get_model(model.model_type, model.model_name,
                                                                                    json.loads(
-                                                                                       decrypt(model.credential)),
+                                                                                       rsa_long_decrypt(
+                                                                                           model.credential)),
                                                                                    streaming=True)
 
             chat_id = str(uuid.uuid1())
@@ -206,12 +257,34 @@ class ChatSerializers(serializers.Serializer):
                                     application), timeout=60 * 30)
             return chat_id
 
+    class OpenWorkFlowChat(serializers.Serializer):
+        work_flow = WorkFlowSerializers(error_messages=ErrMessage.uuid("工作流"))
+
+        def open(self):
+            self.is_valid(raise_exception=True)
+            work_flow = self.data.get('work_flow')
+            Flow.new_instance(work_flow).is_valid()
+            chat_id = str(uuid.uuid1())
+            application = Application(id=None, dialogue_number=3, model=None,
+                                      dataset_setting={},
+                                      model_setting={},
+                                      problem_optimization=None,
+                                      type=ApplicationTypeChoices.WORK_FLOW
+                                      )
+            work_flow_version = WorkFlowVersion(work_flow=work_flow)
+            chat_cache.set(chat_id,
+                           ChatInfo(chat_id, None, [],
+                                    [],
+                                    application, work_flow_version), timeout=60 * 30)
+            return chat_id
+
     class OpenTempChat(serializers.Serializer):
         user_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("用户id"))
 
         id = serializers.UUIDField(required=False, allow_null=True,
                                    error_messages=ErrMessage.uuid("应用id"))
-        model_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("模型id"))
+        model_id = serializers.CharField(required=False, allow_null=True, allow_blank=True,
+                                         error_messages=ErrMessage.uuid("模型id"))
 
         multiple_rounds_dialogue = serializers.BooleanField(required=True,
                                                             error_messages=ErrMessage.boolean("多轮会话"))
@@ -244,14 +317,18 @@ class ChatSerializers(serializers.Serializer):
         def open(self):
             user_id = self.is_valid(raise_exception=True)
             chat_id = str(uuid.uuid1())
-            model = QuerySet(Model).filter(user_id=user_id, id=self.data.get('model_id')).first()
-            if model is None:
-                raise AppApiException(500, "模型不存在")
+            model_id = self.data.get('model_id')
+            if model_id is not None and len(model_id) > 0:
+                model = QuerySet(Model).filter(user_id=user_id, id=self.data.get('model_id')).first()
+                chat_model = ModelProvideConstants[model.provider].value.get_model(model.model_type, model.model_name,
+                                                                                   json.loads(
+                                                                                       rsa_long_decrypt(
+                                                                                           model.credential)),
+                                                                                   streaming=True)
+            else:
+                model = None
+                chat_model = None
             dataset_id_list = self.data.get('dataset_id_list')
-            chat_model = ModelProvideConstants[model.provider].value.get_model(model.model_type, model.model_name,
-                                                                               json.loads(
-                                                                                   decrypt(model.credential)),
-                                                                               streaming=True)
             application = Application(id=None, dialogue_number=3, model=model,
                                       dataset_setting=self.data.get('dataset_setting'),
                                       model_setting=self.data.get('model_setting'),
@@ -274,25 +351,41 @@ class ChatRecordSerializerModel(serializers.ModelSerializer):
                   'create_time', 'update_time']
 
 
+class ChatSerializerModel(serializers.ModelSerializer):
+    class Meta:
+        model = Chat
+        fields = ['id', 'application_id', 'abstract', 'client_id']
+
+
 class ChatRecordSerializer(serializers.Serializer):
     class Operate(serializers.Serializer):
         chat_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("对话id"))
-
+        application_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("应用id"))
         chat_record_id = serializers.UUIDField(required=True, error_messages=ErrMessage.uuid("对话记录id"))
+
+        def is_valid(self, *, current_role=None, raise_exception=False):
+            super().is_valid(raise_exception=True)
+            application_access_token = QuerySet(ApplicationAccessToken).filter(
+                application_id=self.data.get('application_id')).first()
+            if application_access_token is None:
+                raise AppApiException(500, '不存在的应用认证信息')
+            if not application_access_token.show_source and current_role == RoleConstants.APPLICATION_ACCESS_TOKEN.value:
+                raise AppApiException(500, '未开启显示知识来源')
 
         def get_chat_record(self):
             chat_record_id = self.data.get('chat_record_id')
             chat_id = self.data.get('chat_id')
             chat_info: ChatInfo = chat_cache.get(chat_id)
-            chat_record_list = [chat_record for chat_record in chat_info.chat_record_list if
-                                chat_record.id == uuid.UUID(chat_record_id)]
-            if chat_record_list is not None and len(chat_record_list):
-                return chat_record_list[-1]
+            if chat_info is not None:
+                chat_record_list = [chat_record for chat_record in chat_info.chat_record_list if
+                                    str(chat_record.id) == str(chat_record_id)]
+                if chat_record_list is not None and len(chat_record_list):
+                    return chat_record_list[-1]
             return QuerySet(ChatRecord).filter(id=chat_record_id, chat_id=chat_id).first()
 
-        def one(self, with_valid=True):
+        def one(self, current_role: RoleConstants, with_valid=True):
             if with_valid:
-                self.is_valid(raise_exception=True)
+                self.is_valid(current_role=current_role, raise_exception=True)
             chat_record = self.get_chat_record()
             if chat_record is None:
                 raise AppApiException(500, "对话不存在")
@@ -301,13 +394,16 @@ class ChatRecordSerializer(serializers.Serializer):
     class Query(serializers.Serializer):
         application_id = serializers.UUIDField(required=True)
         chat_id = serializers.UUIDField(required=True)
+        order_asc = serializers.BooleanField(required=False)
 
         def list(self, with_valid=True):
             if with_valid:
                 self.is_valid(raise_exception=True)
             QuerySet(ChatRecord).filter(chat_id=self.data.get('chat_id'))
+            order_by = 'create_time' if self.data.get('order_asc') is None or self.data.get(
+                'order_asc') else '-create_time'
             return [ChatRecordSerializerModel(chat_record).data for chat_record in
-                    QuerySet(ChatRecord).filter(chat_id=self.data.get('chat_id'))]
+                    QuerySet(ChatRecord).filter(chat_id=self.data.get('chat_id')).order_by(order_by)]
 
         @staticmethod
         def reset_chat_record(chat_record):
@@ -330,14 +426,17 @@ class ChatRecordSerializer(serializers.Serializer):
                 'padding_problem_text': chat_record.details.get('problem_padding').get(
                     'padding_problem_text') if 'problem_padding' in chat_record.details else None,
                 'dataset_list': dataset_list,
-                'paragraph_list': paragraph_list
+                'paragraph_list': paragraph_list,
+                'execution_details': [chat_record.details[key] for key in chat_record.details]
             }
 
         def page(self, current_page: int, page_size: int, with_valid=True):
             if with_valid:
                 self.is_valid(raise_exception=True)
+            order_by = 'create_time' if self.data.get('order_asc') is None or self.data.get(
+                'order_asc') else '-create_time'
             page = page_search(current_page, page_size,
-                               QuerySet(ChatRecord).filter(chat_id=self.data.get('chat_id')).order_by("index"),
+                               QuerySet(ChatRecord).filter(chat_id=self.data.get('chat_id')).order_by(order_by),
                                post_records_handler=lambda chat_record: self.reset_chat_record(chat_record))
             return page
 
@@ -381,9 +480,12 @@ class ChatRecordSerializer(serializers.Serializer):
             return True
 
     class ImproveSerializer(serializers.Serializer):
-        title = serializers.CharField(required=False, allow_null=True, allow_blank=True,
+        title = serializers.CharField(required=False, max_length=256, allow_null=True, allow_blank=True,
                                       error_messages=ErrMessage.char("段落标题"))
         content = serializers.CharField(required=True, error_messages=ErrMessage.char("段落内容"))
+
+        problem_text = serializers.CharField(required=False, max_length=256, allow_null=True, allow_blank=True,
+                                             error_messages=ErrMessage.char("问题"))
 
     class ParagraphModel(serializers.ModelSerializer):
         class Meta:
@@ -455,8 +557,9 @@ class ChatRecordSerializer(serializers.Serializer):
                                   content=instance.get("content"),
                                   dataset_id=dataset_id,
                                   title=instance.get("title") if 'title' in instance else '')
-
-            problem = Problem(id=uuid.uuid1(), content=chat_record.problem_text, dataset_id=dataset_id)
+            problem_text = instance.get('problem_text') if instance.get(
+                'problem_text') is not None else chat_record.problem_text
+            problem = Problem(id=uuid.uuid1(), content=problem_text, dataset_id=dataset_id)
             problem_paragraph_mapping = ProblemParagraphMapping(id=uuid.uuid1(), dataset_id=dataset_id,
                                                                 document_id=document_id,
                                                                 problem_id=problem.id,

@@ -4,6 +4,7 @@
     placeholder="搜索"
     prefix-icon="Search"
     class="p-24 pt-0 pb-0 mb-16 mt-4"
+    clearable
   />
   <div class="p-24 pt-0">
     <el-table :data="filterData" :max-height="tableHeight">
@@ -17,15 +18,8 @@
               class="mr-12"
               shape="square"
               :size="24"
-              style="flex-shrink: 0"
             />
-            <AppAvatar
-              v-else-if="isDataset"
-              class="mr-12"
-              shape="square"
-              :size="24"
-              style="flex-shrink: 0"
-            >
+            <AppAvatar v-else-if="isDataset" class="mr-12" shape="square" :size="24">
               <img src="@/assets/icon_document.svg" style="width: 58%" alt="" />
             </AppAvatar>
             <auto-tooltip :content="row?.name">
@@ -45,8 +39,8 @@
         <template #default="{ row }">
           <el-checkbox
             :disabled="props.manage"
-            v-model="row.operate[MANAGE]"
-            @change="checkedOperateChange(MANAGE, row)"
+            v-model="row.operate[TeamEnum.MANAGE]"
+            @change="checkedOperateChange(TeamEnum.MANAGE, row)"
           />
         </template>
       </el-table-column>
@@ -61,8 +55,8 @@
         <template #default="{ row }">
           <el-checkbox
             :disabled="props.manage"
-            v-model="row.operate[USE]"
-            @change="checkedOperateChange(USE, row)"
+            v-model="row.operate[TeamEnum.USE]"
+            @change="checkedOperateChange(TeamEnum.USE, row)"
           />
         </template>
       </el-table-column>
@@ -71,7 +65,7 @@
 </template>
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
-import { MANAGE, USE, DATASET, APPLICATION } from './../utils'
+import { TeamEnum } from '@/enums/team'
 
 const props = defineProps({
   data: {
@@ -84,13 +78,13 @@ const props = defineProps({
   manage: Boolean
 })
 
-const isDataset = computed(() => props.type === DATASET)
-const isApplication = computed(() => props.type === APPLICATION)
+const isDataset = computed(() => props.type === TeamEnum.DATASET)
+const isApplication = computed(() => props.type === TeamEnum.APPLICATION)
 
 const emit = defineEmits(['update:data'])
 const allChecked: any = ref({
-  [MANAGE]: false,
-  [USE]: false
+  [TeamEnum.MANAGE]: false,
+  [TeamEnum.USE]: false
 })
 
 const filterText = ref('')
@@ -122,10 +116,10 @@ function handleCheckAllChange(val: string | number | boolean, Name: string | num
   }
 }
 function checkedOperateChange(Name: string | number, row: any) {
-  if (Name === MANAGE && row.operate[MANAGE]) {
+  if (Name === TeamEnum.MANAGE && row.operate[TeamEnum.MANAGE]) {
     props.data.map((item: any) => {
       if (item.id === row.id) {
-        item.operate[USE] = true
+        item.operate[TeamEnum.USE] = true
       }
     })
   }
@@ -144,4 +138,3 @@ onMounted(() => {
 })
 </script>
 <style lang="scss" scope></style>
-../utils
