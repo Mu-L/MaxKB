@@ -39,6 +39,7 @@ export const baseNode = {
     node_data: {
       name: '',
       desc: '',
+      // @ts-ignore
       prologue: t('views.application.prompt.defaultPrologue')
     },
     config: {}
@@ -227,16 +228,76 @@ export const imageUnderstandNode = {
     }
   }
 }
+
+export const imageGenerateNode = {
+  type: WorkflowType.ImageGenerateNode,
+  text: '根据提供的文本内容生成图片',
+  label: '图片生成',
+  height: 252,
+  properties: {
+    stepName: '图片生成',
+    config: {
+      fields: [
+        {
+          label: 'AI 回答内容',
+          value: 'answer'
+        },
+        {
+          label: '图片',
+          value: 'image'
+        }
+      ]
+    }
+  }
+}
+
+export const speechToTextNode = {
+  type: WorkflowType.SpeechToTextNode,
+  text: '将音频通过语音识别模型转换为文本',
+  label: '语音转文本',
+  height: 252,
+  properties: {
+    stepName: '语音转文本',
+    config: {
+      fields: [
+        {
+          label: '结果',
+          value: 'result'
+        }
+      ]
+    }
+  }
+}
+export const textToSpeechNode = {
+  type: WorkflowType.TextToSpeechNode,
+  text: '将文本通过语音合成模型转换为音频',
+  label: '文本转语音',
+  height: 252,
+  properties: {
+    stepName: '文本转语音',
+    config: {
+      fields: [
+        {
+          label: '结果',
+          value: 'result'
+        }
+      ]
+    }
+  }
+}
 export const menuNodes = [
   aiChatNode,
+  imageUnderstandNode,
+  imageGenerateNode,
   searchDatasetNode,
-  questionNode,
+  rerankerNode,
   conditionNode,
   replyNode,
-  rerankerNode,
+  formNode,
+  questionNode,
   documentExtractNode,
-  imageUnderstandNode,
-  formNode
+  speechToTextNode,
+  textToSpeechNode
 ]
 
 /**
@@ -326,7 +387,10 @@ export const nodeDict: any = {
   [WorkflowType.FormNode]: formNode,
   [WorkflowType.Application]: applicationNode,
   [WorkflowType.DocumentExtractNode]: documentExtractNode,
-  [WorkflowType.ImageUnderstandNode]: imageUnderstandNode
+  [WorkflowType.ImageUnderstandNode]: imageUnderstandNode,
+  [WorkflowType.TextToSpeechNode]: textToSpeechNode,
+  [WorkflowType.SpeechToTextNode]: speechToTextNode,
+  [WorkflowType.ImageGenerateNode]: imageGenerateNode
 }
 export function isWorkFlow(type: string | undefined) {
   return type === 'WORK_FLOW'

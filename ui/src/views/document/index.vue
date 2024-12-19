@@ -99,34 +99,44 @@
                         >全部</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '1' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.SUCCESS ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '1')"
+                        :command="beforeCommand('status', State.SUCCESS)"
                         >成功</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '2' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.FAILURE ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '2')"
+                        :command="beforeCommand('status', State.FAILURE)"
                         >失败</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '0' ? 'is-active' : ''"
+                        :class="
+                          filterMethod['status'] === State.STARTED &&
+                          filterMethod['task_type'] == TaskType.EMBEDDING
+                            ? 'is-active'
+                            : ''
+                        "
                         class="justify-center"
-                        :command="beforeCommand('status', '0')"
+                        :command="beforeCommand('status', State.STARTED, TaskType.EMBEDDING)"
                         >索引中</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '3' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.PENDING ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '3')"
+                        :command="beforeCommand('status', State.PENDING)"
                         >排队中</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '4' ? 'is-active' : ''"
+                        :class="
+                          filterMethod['status'] === State.STARTED &&
+                          filterMethod['task_type'] === TaskType.GENERATE_PROBLEM
+                            ? 'is-active'
+                            : ''
+                        "
                         class="justify-center"
-                        :command="beforeCommand('status', '4')"
-                        >生成问题中</el-dropdown-item
+                        :command="beforeCommand('status', State.STARTED, TaskType.GENERATE_PROBLEM)"
+                        >生成中</el-dropdown-item
                       >
                     </el-dropdown-menu>
                   </template>
@@ -177,9 +187,10 @@
             <template #default="{ row }">
               <div @click.stop>
                 <el-switch
+                  :loading="loading"
                   size="small"
                   v-model="row.is_active"
-                  @change="changeState($event, row)"
+                  :before-change="() => changeState(row)"
                 />
               </div>
             </template>
@@ -294,7 +305,11 @@
                         </el-dropdown-item>
                         <el-dropdown-item @click="exportDocument(row)">
                           <AppIcon iconName="app-export"></AppIcon>
-                          导出
+                          导出Excel
+                        </el-dropdown-item>
+                        <el-dropdown-item @click="exportDocumentZip(row)">
+                          <AppIcon iconName="app-export"></AppIcon>
+                          导出Zip
                         </el-dropdown-item>
                         <el-dropdown-item icon="Delete" @click.stop="deleteDocument(row)"
                           >删除</el-dropdown-item
@@ -370,7 +385,11 @@
                         >
                         <el-dropdown-item @click="exportDocument(row)">
                           <AppIcon iconName="app-export"></AppIcon>
-                          导出
+                          导出Excel
+                        </el-dropdown-item>
+                        <el-dropdown-item @click="exportDocumentZip(row)">
+                          <AppIcon iconName="app-export"></AppIcon>
+                          导出Zip
                         </el-dropdown-item>
                         <el-dropdown-item icon="Delete" @click.stop="deleteDocument(row)"
                           >删除</el-dropdown-item
@@ -464,6 +483,13 @@ const exportDocument = (document: any) => {
     MsgSuccess('导出成功')
   })
 }
+const exportDocumentZip = (document: any) => {
+  documentApi
+    .exportDocumentZip(document.name, document.dataset_id, document.id, loading)
+    .then(() => {
+      MsgSuccess('导出成功')
+    })
+}
 function openDatasetDialog(row?: any) {
   const arr: string[] = []
   if (row) {
@@ -481,13 +507,18 @@ function openDatasetDialog(row?: any) {
 
 function dropdownHandle(obj: any) {
   filterMethod.value[obj.attr] = obj.command
+  if (obj.attr == 'status') {
+    filterMethod.value['task_type'] = obj.task_type
+  }
+
   getList()
 }
 
-function beforeCommand(attr: string, val: any) {
+function beforeCommand(attr: string, val: any, task_type?: number) {
   return {
     attr: attr,
-    command: val
+    command: val,
+    task_type
   }
 }
 const cancelTask = (row: any, task_type: number) => {
@@ -663,18 +694,24 @@ function deleteDocument(row: any) {
   更新名称或状态
 */
 function updateData(documentId: string, data: any, msg: string) {
-  documentApi.putDocument(id, documentId, data, loading).then((res) => {
-    const index = documentData.value.findIndex((v) => v.id === documentId)
-    documentData.value.splice(index, 1, res.data)
-    MsgSuccess(msg)
-  })
+  documentApi
+    .putDocument(id, documentId, data, loading)
+    .then((res) => {
+      const index = documentData.value.findIndex((v) => v.id === documentId)
+      documentData.value.splice(index, 1, res.data)
+      MsgSuccess(msg)
+      return true
+    })
+    .catch(() => {
+      return false
+    })
 }
 
-function changeState(bool: Boolean, row: any) {
+function changeState(row: any) {
   const obj = {
-    is_active: bool
+    is_active: !row.is_active
   }
-  const str = bool ? '启用成功' : '禁用成功'
+  const str = !row.is_active ? '启用成功' : '禁用成功'
   currentMouseId.value && updateData(row.id, obj, str)
 }
 

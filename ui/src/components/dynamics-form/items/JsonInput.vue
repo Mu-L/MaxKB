@@ -11,8 +11,8 @@
     />
     <div class="function-CodemirrorEditor__format">
       <el-button text type="info" @click="format" class="magnify">
-        <el-icon><DocumentChecked /></el-icon
-      ></el-button>
+        <el-icon><DocumentChecked /></el-icon>
+      </el-button>
     </div>
     <div class="function-CodemirrorEditor__footer">
       <el-button text type="info" @click="openCodemirrorDialog" class="magnify">
@@ -20,7 +20,7 @@
       </el-button>
     </div>
     <!-- Codemirror 弹出层 -->
-    <el-dialog v-model="dialogVisible" title="Python 代码" append-to-body>
+    <el-dialog v-model="dialogVisible" title="Python 代码" append-to-body fullscreen>
       <Codemirror
         v-model="cloneContent"
         :extensions="extensions"

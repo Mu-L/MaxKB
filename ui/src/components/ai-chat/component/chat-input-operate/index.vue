@@ -1,12 +1,18 @@
 <template>
   <div class="ai-chat__operate p-16-24">
     <slot name="operateBefore" />
+
     <div class="operate-textarea">
       <el-scrollbar max-height="136">
         <div
           class="p-8-12"
           v-loading="localLoading"
-          v-if="uploadDocumentList.length || uploadImageList.length || uploadAudioList.length || uploadVideoList.length"
+          v-if="
+            uploadDocumentList.length ||
+            uploadImageList.length ||
+            uploadAudioList.length ||
+            uploadVideoList.length
+          "
         >
           <el-space wrap>
             <template v-for="(item, index) in uploadDocumentList" :key="index">
@@ -21,7 +27,9 @@
                     class="delete-icon color-secondary"
                     v-if="showDelete === item.url"
                   >
-                    <el-icon><CircleCloseFilled /></el-icon>
+                    <el-icon>
+                      <CircleCloseFilled />
+                    </el-icon>
                   </div>
                   <img :src="getImgUrl(item && item?.name)" alt="" width="24" />
                   <div class="ml-4 ellipsis" style="max-width: 160px" :title="item && item?.name">
@@ -42,7 +50,9 @@
                   class="delete-icon color-secondary"
                   v-if="showDelete === item.url"
                 >
-                  <el-icon><CircleCloseFilled /></el-icon>
+                  <el-icon>
+                    <CircleCloseFilled />
+                  </el-icon>
                 </div>
                 <el-image
                   :src="item.url"
@@ -65,7 +75,9 @@
                     class="delete-icon color-secondary"
                     v-if="showDelete === item.url"
                   >
-                    <el-icon><CircleCloseFilled /></el-icon>
+                    <el-icon>
+                      <CircleCloseFilled />
+                    </el-icon>
                   </div>
                   <img :src="getImgUrl(item && item?.name)" alt="" width="24" />
                   <div class="ml-4 ellipsis" style="max-width: 160px" :title="item && item?.name">
@@ -174,6 +186,7 @@ import 'recorder-core/src/engine/mp3'
 
 import 'recorder-core/src/engine/mp3-engine'
 import { MsgWarning } from '@/utils/message'
+
 const route = useRoute()
 const {
   query: { mode }
@@ -221,7 +234,7 @@ const localLoading = computed({
 const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp']
 const documentExtensions = ['pdf', 'docx', 'txt', 'xls', 'xlsx', 'md', 'html', 'csv']
 const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'flv']
-const audioExtensions = ['mp3']
+const audioExtensions = ['mp3', 'wav', 'ogg', 'aac']
 
 const getAcceptList = () => {
   const { image, document, audio, video } = props.applicationDetails.file_upload_setting
@@ -248,14 +261,21 @@ const getAcceptList = () => {
 const checkMaxFilesLimit = () => {
   return (
     props.applicationDetails.file_upload_setting.maxFiles <=
-    uploadImageList.value.length + uploadDocumentList.value.length + uploadAudioList.value.length + uploadVideoList.value.length
+    uploadImageList.value.length +
+      uploadDocumentList.value.length +
+      uploadAudioList.value.length +
+      uploadVideoList.value.length
   )
 }
 
 const uploadFile = async (file: any, fileList: any) => {
   const { maxFiles, fileLimit } = props.applicationDetails.file_upload_setting
   // 单次上传文件数量限制
-  const file_limit_once = uploadImageList.value.length + uploadDocumentList.value.length + uploadAudioList.value.length + uploadVideoList.value.length
+  const file_limit_once =
+    uploadImageList.value.length +
+    uploadDocumentList.value.length +
+    uploadAudioList.value.length +
+    uploadVideoList.value.length
   if (file_limit_once >= maxFiles) {
     MsgWarning('最多上传' + maxFiles + '个文件')
     fileList.splice(0, fileList.length)
@@ -282,7 +302,6 @@ const uploadFile = async (file: any, fileList: any) => {
   } else if (audioExtensions.includes(extension)) {
     uploadAudioList.value.push(file)
   }
-
 
   if (!chatId_context.value) {
     const res = await props.openChatId()
@@ -332,6 +351,9 @@ const uploadFile = async (file: any, fileList: any) => {
           file.file_id = f[0].file_id
         }
       })
+      if (!inputValue.value && uploadImageList.value.length > 0) {
+        inputValue.value = '请解析图片内容'
+      }
     })
 }
 const recorderTime = ref(0)
@@ -471,7 +493,7 @@ function sendChatHandle(event: any) {
           image_list: uploadImageList.value,
           document_list: uploadDocumentList.value,
           audio_list: uploadAudioList.value,
-          video_list: uploadVideoList.value,
+          video_list: uploadVideoList.value
         })
         inputValue.value = ''
         uploadImageList.value = []
@@ -498,9 +520,11 @@ function deleteFile(index: number, val: string) {
     uploadAudioList.value.splice(index, 1)
   }
 }
+
 function mouseenter(row: any) {
   showDelete.value = row.url
 }
+
 function mouseleave() {
   showDelete.value = ''
 }
@@ -515,9 +539,11 @@ onMounted(() => {
 </script>
 <style lang="scss" scope>
 @import '../../index.scss';
+
 .file {
   position: relative;
   overflow: inherit;
+
   .delete-icon {
     position: absolute;
     right: -5px;
@@ -525,6 +551,7 @@ onMounted(() => {
     z-index: 1;
   }
 }
+
 .upload-tooltip-width {
   width: 300px;
 }

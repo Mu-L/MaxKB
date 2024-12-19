@@ -133,6 +133,7 @@
                 <el-option label="语音识别" value="STT" />
                 <el-option label="语音合成" value="TTS" />
                 <el-option label="图片理解" value="IMAGE" />
+                <el-option label="图片生成" value="TTI" />
               </el-select>
             </div>
           </div>
@@ -323,8 +324,10 @@ onMounted(() => {
       border-bottom: none !important;
       padding-left: 16px;
       font-size: 14px;
+      height: 40px;
       &:hover {
         background: var(--app-text-color-light-1);
+        border-radius: 4px;
       }
     }
     :deep(.el-collapse-item) {
@@ -339,7 +342,7 @@ onMounted(() => {
       border-bottom: none !important;
     }
     :deep(.el-collapse-item__content) {
-      padding-bottom: 0 !important;;
+      padding-bottom: 0 !important;
     }
   }
 }

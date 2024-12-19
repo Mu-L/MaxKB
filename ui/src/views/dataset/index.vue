@@ -118,7 +118,10 @@
                               设置</el-dropdown-item
                             >
                             <el-dropdown-item @click.stop="export_dataset(item)">
-                              <AppIcon iconName="app-export"></AppIcon>导出</el-dropdown-item
+                              <AppIcon iconName="app-export"></AppIcon>导出Excel</el-dropdown-item
+                            >
+                            <el-dropdown-item @click.stop="export_zip_dataset(item)">
+                              <AppIcon iconName="app-export"></AppIcon>导出ZIP</el-dropdown-item
                             >
                             <el-dropdown-item icon="Delete" @click.stop="deleteDataset(item)"
                               >删除</el-dropdown-item
@@ -160,7 +163,7 @@ const loading = ref(false)
 const datasetList = ref<any[]>([])
 const paginationConfig = reactive({
   current_page: 1,
-  page_size: 20,
+  page_size: 30,
   total: 0
 })
 
@@ -222,6 +225,11 @@ function searchHandle() {
 }
 const export_dataset = (item: any) => {
   datasetApi.exportDataset(item.name, item.id, loading).then((ok) => {
+    MsgSuccess('导出成功')
+  })
+}
+const export_zip_dataset = (item: any) => {
+  datasetApi.exportZipDataset(item.name, item.id, loading).then((ok) => {
     MsgSuccess('导出成功')
   })
 }
