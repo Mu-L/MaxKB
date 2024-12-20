@@ -20,7 +20,10 @@
             <template v-for="(item, index) in document_list" :key="index">
               <el-card shadow="never" style="--el-card-padding: 8px" class="download-file cursor">
                 <div class="download-button flex align-center" @click="downloadFile(item)">
-                  <el-icon class="mr-4"><Download /></el-icon>点击下载文件
+                  <el-icon class="mr-4">
+                    <Download />
+                  </el-icon>
+                  点击下载文件
                 </div>
                 <div class="show flex align-center">
                   <img :src="getImgUrl(item && item?.name)" alt="" width="24" />
@@ -52,6 +55,20 @@
             </template>
           </el-space>
         </div>
+        <div class="mb-8" v-if="audio_list.length">
+          <el-space wrap>
+            <template v-for="(item, index) in audio_list" :key="index">
+              <div class="file cursor border-r-4" v-if="item.url">
+                <audio
+                  :src="item.url"
+                  controls
+                  style="width: 350px; height: 43px"
+                  class="border-r-4"
+                />
+              </div>
+            </template>
+          </el-space>
+        </div>
         {{ chatRecord.problem_text }}
       </div>
     </div>
@@ -61,6 +78,7 @@
 import { type chatType } from '@/api/type/application'
 import { getImgUrl, getAttrsArray, downloadByURL } from '@/utils/utils'
 import { onMounted, computed } from 'vue'
+
 const props = defineProps<{
   application: any
   chatRecord: chatType
@@ -68,20 +86,29 @@ const props = defineProps<{
 const document_list = computed(() => {
   if (props.chatRecord?.upload_meta) {
     return props.chatRecord.upload_meta?.document_list || []
-  } else if (props.chatRecord.execution_details?.length > 0) {
-    return props.chatRecord.execution_details[0]?.document_list || []
-  } else {
-    return []
   }
+  const startNode = props.chatRecord.execution_details?.find(
+    (detail) => detail.type === 'start-node'
+  )
+  return startNode?.document_list || []
 })
 const image_list = computed(() => {
   if (props.chatRecord?.upload_meta) {
     return props.chatRecord.upload_meta?.image_list || []
-  } else if (props.chatRecord.execution_details?.length > 0) {
-    return props.chatRecord.execution_details[0]?.image_list || []
-  } else {
-    return []
   }
+  const startNode = props.chatRecord.execution_details?.find(
+    (detail) => detail.type === 'start-node'
+  )
+  return startNode?.image_list || []
+})
+const audio_list = computed(() => {
+  if (props.chatRecord?.upload_meta) {
+    return props.chatRecord.upload_meta?.audio_list || []
+  }
+  const startNode = props.chatRecord.execution_details?.find(
+    (detail) => detail.type === 'start-node'
+  )
+  return startNode?.audio_list || []
 })
 
 function downloadFile(item: any) {
@@ -94,21 +121,26 @@ onMounted(() => {})
 .download-file {
   width: 200px;
   height: 43px;
+
   &:hover {
     color: var(--el-color-primary);
     border: 1px solid var(--el-color-primary);
+
     .download-button {
       display: block;
       text-align: center;
       line-height: 26px;
     }
+
     .show {
       display: none;
     }
   }
+
   .show {
     display: block;
   }
+
   .download-button {
     display: none;
   }

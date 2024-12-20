@@ -3,6 +3,18 @@
     <div class="flex-between mb-16">
       <h4>{{ $t('views.application.applicationList.title') }}</h4>
       <div class="flex-between">
+        <el-upload
+          :file-list="[]"
+          class="flex-between mr-12"
+          action="#"
+          multiple
+          :auto-upload="false"
+          :show-file-list="false"
+          :limit="1"
+          :on-change="(file: any, fileList: any) => importApplication(file)"
+        >
+          <el-button>导入应用</el-button>
+        </el-upload>
         <el-select
           v-model="selectUserId"
           class="mr-12"
@@ -128,7 +140,10 @@
                             <AppIcon iconName="app-copy"></AppIcon>
                             复制</el-dropdown-item
                           >
-
+                          <el-dropdown-item @click.stop="exportApplication(item)">
+                            <AppIcon iconName="app-export"></AppIcon>
+                            导出
+                          </el-dropdown-item>
                           <el-dropdown-item icon="Delete" @click.stop="deleteApplication(item)">{{
                             $t('views.application.applicationList.card.delete.tooltip')
                           }}</el-dropdown-item>
@@ -152,7 +167,7 @@ import { ref, onMounted, reactive } from 'vue'
 import applicationApi from '@/api/application'
 import CreateApplicationDialog from './component/CreateApplicationDialog.vue'
 import CopyApplicationDialog from './component/CopyApplicationDialog.vue'
-import { MsgSuccess, MsgConfirm, MsgAlert } from '@/utils/message'
+import { MsgSuccess, MsgConfirm, MsgAlert, MsgError } from '@/utils/message'
 import { isAppIcon } from '@/utils/application'
 import { useRouter } from 'vue-router'
 import { isWorkFlow } from '@/utils/application'
@@ -171,7 +186,7 @@ const applicationList = ref<any[]>([])
 
 const paginationConfig = reactive({
   current_page: 1,
-  page_size: 20,
+  page_size: 30,
   total: 0
 })
 interface UserOption {
@@ -203,7 +218,20 @@ function settingApplication(row: any) {
     router.push({ path: `/application/${row.id}/${row.type}/setting` })
   }
 }
-
+const exportApplication = (application: any) => {
+  applicationApi.exportApplication(application.id, application.name, loading).catch((e) => {
+    e.response.data.text().then((res: string) => {
+      MsgError(`导出失败:${JSON.parse(res).message}`)
+    })
+  })
+}
+const importApplication = (file: any) => {
+  const formData = new FormData()
+  formData.append('file', file.raw, file.name)
+  applicationApi.importApplication(formData, loading).then((ok) => {
+    searchHandle()
+  })
+}
 function openCreateDialog() {
   if (user.isEnterprise()) {
     CreateApplicationDialogRef.value.open()
@@ -248,18 +276,18 @@ function mapToUrlParams(map: any[]) {
 }
 
 function getAccessToken(id: string) {
-  applicationList.value.filter((app)=>app.id === id)[0]?.work_flow?.nodes
-      ?.filter((v: any) => v.id === 'base-node')
-      .map((v: any) => {
-        apiInputParams.value = v.properties.api_input_field_list
-          ? v.properties.api_input_field_list
-              .map((v: any) => {
-                return {
-                  name: v.variable,
-                  value: v.default_value
-                }
-              })
-          : v.properties.input_field_list
+  applicationList.value
+    .filter((app) => app.id === id)[0]
+    ?.work_flow?.nodes?.filter((v: any) => v.id === 'base-node')
+    .map((v: any) => {
+      apiInputParams.value = v.properties.api_input_field_list
+        ? v.properties.api_input_field_list.map((v: any) => {
+            return {
+              name: v.variable,
+              value: v.default_value
+            }
+          })
+        : v.properties.input_field_list
           ? v.properties.input_field_list
               .filter((v: any) => v.assignment_method === 'api_input')
               .map((v: any) => {
@@ -269,9 +297,11 @@ function getAccessToken(id: string) {
                 }
               })
           : []
-      })
+    })
 
-  const apiParams = mapToUrlParams(apiInputParams.value) ? '?' + mapToUrlParams(apiInputParams.value) : ''
+  const apiParams = mapToUrlParams(apiInputParams.value)
+    ? '?' + mapToUrlParams(apiInputParams.value)
+    : ''
   application.asyncGetAccessToken(id, loading).then((res: any) => {
     window.open(application.location + res?.data?.access_token + apiParams)
   })

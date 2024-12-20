@@ -6,12 +6,14 @@
     @date：2023/9/22 13:43
     @desc:
 """
+import io
 import logging
 import os
 import re
 import traceback
 import uuid
 from functools import reduce
+from tempfile import TemporaryDirectory
 from typing import List, Dict
 
 import openpyxl
@@ -30,18 +32,23 @@ from common.db.search import native_search, native_page_search
 from common.event import ListenerManagement
 from common.event.common import work_thread_pool
 from common.exception.app_exception import AppApiException
+from common.handle.impl.csv_split_handle import CsvSplitHandle
 from common.handle.impl.doc_split_handle import DocSplitHandle
 from common.handle.impl.html_split_handle import HTMLSplitHandle
 from common.handle.impl.pdf_split_handle import PdfSplitHandle
 from common.handle.impl.qa.csv_parse_qa_handle import CsvParseQAHandle
 from common.handle.impl.qa.xls_parse_qa_handle import XlsParseQAHandle
 from common.handle.impl.qa.xlsx_parse_qa_handle import XlsxParseQAHandle
-from common.handle.impl.table.csv_parse_table_handle import CsvSplitHandle
-from common.handle.impl.table.xls_parse_table_handle import XlsSplitHandle
-from common.handle.impl.table.xlsx_parse_table_handle import XlsxSplitHandle
+from common.handle.impl.qa.zip_parse_qa_handle import ZipParseQAHandle
+from common.handle.impl.table.csv_parse_table_handle import CsvSplitHandle as CsvSplitTableHandle
+from common.handle.impl.table.xls_parse_table_handle import XlsSplitHandle as XlsSplitTableHandle
+from common.handle.impl.table.xlsx_parse_table_handle import XlsxSplitHandle as XlsxSplitTableHandle
 from common.handle.impl.text_split_handle import TextSplitHandle
+from common.handle.impl.xls_split_handle import XlsSplitHandle
+from common.handle.impl.xlsx_split_handle import XlsxSplitHandle
+from common.handle.impl.zip_split_handle import ZipSplitHandle
 from common.mixins.api_mixin import ApiMixin
-from common.util.common import post, flat_map, bulk_create_in_batches
+from common.util.common import post, flat_map, bulk_create_in_batches, parse_image
 from common.util.field_message import ErrMessage
 from common.util.file_util import get_file_content
 from common.util.fork import Fork
@@ -49,17 +56,16 @@ from common.util.split_model import get_split_model
 from dataset.models.data_set import DataSet, Document, Paragraph, Problem, Type, ProblemParagraphMapping, Image, \
     TaskType, State
 from dataset.serializers.common_serializers import BatchSerializer, MetaSerializer, ProblemParagraphManage, \
-    get_embedding_model_id_by_dataset_id
+    get_embedding_model_id_by_dataset_id, write_image, zip_dir
 from dataset.serializers.paragraph_serializers import ParagraphSerializers, ParagraphInstanceSerializer
 from dataset.task import sync_web_document, generate_related_by_document_id
 from embedding.task.embedding import embedding_by_document, delete_embedding_by_document_list, \
     delete_embedding_by_document, update_embedding_dataset_id, delete_embedding_by_paragraph_ids, \
     embedding_by_document_list
 from smartdoc.conf import PROJECT_DIR
-from django.db import models
 
-parse_qa_handle_list = [XlsParseQAHandle(), CsvParseQAHandle(), XlsxParseQAHandle()]
-parse_table_handle_list = [CsvSplitHandle(), XlsSplitHandle(), XlsxSplitHandle()]
+parse_qa_handle_list = [XlsParseQAHandle(), CsvParseQAHandle(), XlsxParseQAHandle(), ZipParseQAHandle()]
+parse_table_handle_list = [CsvSplitTableHandle(), XlsSplitTableHandle(), XlsxSplitTableHandle()]
 
 
 class FileBufferHandle:
@@ -144,6 +150,19 @@ class DocumentWebInstanceSerializer(ApiMixin, serializers.Serializer):
                                   required=True,
                                   description='知识库id'),
                 ]
+
+    @staticmethod
+    def get_request_body_api():
+        return openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['source_url_list'],
+            properties={
+                'source_url_list': openapi.Schema(type=openapi.TYPE_ARRAY, title="文档地址列表",
+                                                  description="文档地址列表",
+                                                  items=openapi.Schema(type=openapi.TYPE_STRING)),
+                'selector': openapi.Schema(type=openapi.TYPE_STRING, title="选择器", description="选择器")
+            }
+        )
 
 
 class DocumentInstanceSerializer(ApiMixin, serializers.Serializer):
@@ -364,6 +383,7 @@ class DocumentSerializers(ApiMixin, serializers.Serializer):
                                          "文档名称"))
         hit_handling_method = serializers.CharField(required=False, error_messages=ErrMessage.char("命中处理方式"))
         is_active = serializers.BooleanField(required=False, error_messages=ErrMessage.boolean("文档是否可用"))
+        task_type = serializers.IntegerField(required=False, error_messages=ErrMessage.integer("任务类型"))
         status = serializers.CharField(required=False, error_messages=ErrMessage.char("文档状态"))
 
         def get_query_set(self):
@@ -375,8 +395,22 @@ class DocumentSerializers(ApiMixin, serializers.Serializer):
                 query_set = query_set.filter(**{'hit_handling_method': self.data.get('hit_handling_method')})
             if 'is_active' in self.data and self.data.get('is_active') is not None:
                 query_set = query_set.filter(**{'is_active': self.data.get('is_active')})
-            if 'status' in self.data and self.data.get('status') is not None:
-                query_set = query_set.filter(**{'status': self.data.get('status')})
+            if 'status' in self.data and self.data.get(
+                    'status') is not None:
+                task_type = self.data.get('task_type')
+                status = self.data.get(
+                    'status')
+                if task_type is not None:
+                    query_set = query_set.annotate(
+                        reversed_status=Reverse('status'),
+                        task_type_status=Substr('reversed_status', TaskType(task_type).value,
+                                                1),
+                    ).filter(task_type_status=State(status).value).values('id')
+                else:
+                    if status != State.SUCCESS.value:
+                        query_set = query_set.filter(status__icontains=status)
+                    else:
+                        query_set = query_set.filter(status__iregex='^[2n]*$')
             query_set = query_set.order_by('-create_time', 'id')
             return query_set
 
@@ -536,6 +570,34 @@ class DocumentSerializers(ApiMixin, serializers.Serializer):
             workbook.save(response)
             return response
 
+        def export_zip(self, with_valid=True):
+            if with_valid:
+                self.is_valid(raise_exception=True)
+            document = QuerySet(Document).filter(id=self.data.get("document_id")).first()
+            paragraph_list = native_search(QuerySet(Paragraph).filter(document_id=self.data.get("document_id")),
+                                           get_file_content(
+                                               os.path.join(PROJECT_DIR, "apps", "dataset", 'sql',
+                                                            'list_paragraph_document_name.sql')))
+            problem_mapping_list = native_search(
+                QuerySet(ProblemParagraphMapping).filter(document_id=self.data.get("document_id")), get_file_content(
+                    os.path.join(PROJECT_DIR, "apps", "dataset", 'sql', 'list_problem_mapping.sql')),
+                with_table_name=True)
+            data_dict, document_dict = self.merge_problem(paragraph_list, problem_mapping_list, [document])
+            res = [parse_image(paragraph.get('content')) for paragraph in paragraph_list]
+
+            workbook = DocumentSerializers.Operate.get_workbook(data_dict, document_dict)
+            response = HttpResponse(content_type='application/zip')
+            response['Content-Disposition'] = 'attachment; filename="archive.zip"'
+            zip_buffer = io.BytesIO()
+            with TemporaryDirectory() as tempdir:
+                dataset_file = os.path.join(tempdir, 'dataset.xlsx')
+                workbook.save(dataset_file)
+                for r in res:
+                    write_image(tempdir, r)
+                zip_dir(tempdir, zip_buffer)
+            response.write(zip_buffer.getvalue())
+            return response
+
         @staticmethod
         def get_workbook(data_dict, document_dict):
             # 创建工作簿对象
@@ -648,7 +710,7 @@ class DocumentSerializers(ApiMixin, serializers.Serializer):
             ListenerManagement.update_status(QuerySet(Paragraph).annotate(
                 reversed_status=Reverse('status'),
                 task_type_status=Substr('reversed_status', TaskType(instance.get('type')).value,
-                                        TaskType(instance.get('type')).value),
+                                        1),
             ).filter(task_type_status__in=[State.PENDING.value, State.STARTED.value]).filter(
                 document_id=document_id).values('id'),
                                              TaskType(instance.get('type')),
@@ -656,7 +718,7 @@ class DocumentSerializers(ApiMixin, serializers.Serializer):
             ListenerManagement.update_status(QuerySet(Document).annotate(
                 reversed_status=Reverse('status'),
                 task_type_status=Substr('reversed_status', TaskType(instance.get('type')).value,
-                                        TaskType(instance.get('type')).value),
+                                        1),
             ).filter(task_type_status__in=[State.PENDING.value, State.STARTED.value]).filter(
                 id=document_id).values('id'),
                                              TaskType(instance.get('type')),
@@ -902,9 +964,9 @@ class DocumentSerializers(ApiMixin, serializers.Serializer):
 
         def parse(self):
             file_list = self.data.get("file")
-            return list(
-                map(lambda f: file_to_paragraph(f, self.data.get("patterns", None), self.data.get("with_filter", None),
-                                                self.data.get("limit", 4096)), file_list))
+            return reduce(lambda x, y: [*x, *y],
+                          [file_to_paragraph(f, self.data.get("patterns", None), self.data.get("with_filter", None),
+                                             self.data.get("limit", 4096)) for f in file_list], [])
 
     class SplitPattern(ApiMixin, serializers.Serializer):
         @staticmethod
@@ -1082,20 +1144,33 @@ class FileBufferHandle:
 
 
 default_split_handle = TextSplitHandle()
-split_handles = [HTMLSplitHandle(), DocSplitHandle(), PdfSplitHandle(), default_split_handle]
+split_handles = [HTMLSplitHandle(), DocSplitHandle(), PdfSplitHandle(), XlsxSplitHandle(), XlsSplitHandle(),
+                 CsvSplitHandle(),
+                 ZipSplitHandle(),
+                 default_split_handle]
 
 
 def save_image(image_list):
     if image_list is not None and len(image_list) > 0:
-        QuerySet(Image).bulk_create(image_list)
+        exist_image_list = [str(i.get('id')) for i in
+                            QuerySet(Image).filter(id__in=[i.id for i in image_list]).values('id')]
+        save_image_list = [image for image in image_list if not exist_image_list.__contains__(str(image.id))]
+        if len(save_image_list) > 0:
+            QuerySet(Image).bulk_create(save_image_list)
 
 
 def file_to_paragraph(file, pattern_list: List, with_filter: bool, limit: int):
     get_buffer = FileBufferHandle().get_buffer
     for split_handle in split_handles:
         if split_handle.support(file, get_buffer):
-            return split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, save_image)
-    return default_split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, save_image)
+            result = split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, save_image)
+            if isinstance(result, list):
+                return result
+            return [result]
+    result = default_split_handle.handle(file, pattern_list, with_filter, limit, get_buffer, save_image)
+    if isinstance(result, list):
+        return result
+    return [result]
 
 
 def delete_problems_and_mappings(document_ids):

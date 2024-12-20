@@ -19,6 +19,7 @@ from rest_framework import status
 from rest_framework.exceptions import ErrorDetail, ValidationError
 
 from application.flow import tools
+from application.flow.common import Answer
 from application.flow.i_step_node import INode, WorkFlowPostHandler, NodeResult
 from application.flow.step_node import get_node
 from common.exception.app_exception import AppApiException
@@ -28,7 +29,7 @@ from function_lib.models.function import FunctionLib
 from setting.models import Model
 from setting.models_provider import get_model_credential
 
-executor = ThreadPoolExecutor(max_workers=50)
+executor = ThreadPoolExecutor(max_workers=200)
 
 
 class Edge:
@@ -53,7 +54,7 @@ class Node:
 
 
 end_nodes = ['ai-chat-node', 'reply-node', 'function-node', 'function-lib-node', 'application-node',
-             'image-understand-node']
+             'image-understand-node', 'speech-to-text-node', 'text-to-speech-node', 'image-generate-node']
 
 
 class Flow:
@@ -243,6 +244,7 @@ class WorkflowManage:
     def __init__(self, flow: Flow, params, work_flow_post_handler: WorkFlowPostHandler,
                  base_to_response: BaseToResponse = SystemToResponse(), form_data=None, image_list=None,
                  document_list=None,
+                 audio_list=None,
                  start_node_id=None,
                  start_node_data=None, chat_record=None, child_node=None):
         if form_data is None:
@@ -251,11 +253,14 @@ class WorkflowManage:
             image_list = []
         if document_list is None:
             document_list = []
+        if audio_list is None:
+            audio_list = []
         self.start_node_id = start_node_id
         self.start_node = None
         self.form_data = form_data
         self.image_list = image_list
         self.document_list = document_list
+        self.audio_list = audio_list
         self.params = params
         self.flow = flow
         self.lock = threading.Lock()
@@ -266,7 +271,7 @@ class WorkflowManage:
         self.current_result = None
         self.answer = ""
         self.answer_list = ['']
-        self.status = 0
+        self.status = 200
         self.base_to_response = base_to_response
         self.chat_record = chat_record
         self.await_future_map = {}
@@ -302,6 +307,9 @@ class WorkflowManage:
                                                           get_node_params=get_node_params)
                 self.start_node.valid_args(
                     {**self.start_node.node_params, 'form_data': start_node_data}, self.start_node.workflow_params)
+                if self.start_node.type == 'application-node':
+                    application_node_dict = node_details.get('application_node_dict', {})
+                    self.start_node.context['application_node_dict'] = application_node_dict
                 self.node_context.append(self.start_node)
                 continue
 
@@ -376,8 +384,23 @@ class WorkflowManage:
                                                                  '', True, message_tokens, answer_tokens, {})
 
     def run_chain_async(self, current_node, node_result_future):
-        future = executor.submit(self.run_chain, current_node, node_result_future)
-        return future
+        return executor.submit(self.run_chain_manage, current_node, node_result_future)
+
+    def run_chain_manage(self, current_node, node_result_future):
+        if current_node is None:
+            start_node = self.get_start_node()
+            current_node = get_node(start_node.type)(start_node, self.params, self)
+        result = self.run_chain(current_node, node_result_future)
+        node_list = self.get_next_node_list(current_node, result)
+        if len(node_list) == 1:
+            self.run_chain_manage(node_list[0], None)
+        elif len(node_list) > 1:
+
+            # 获取到可执行的子节点
+            result_list = [{'node': node, 'future': executor.submit(self.run_chain_manage, node, None)} for node in
+                           node_list]
+            self.set_await_map(result_list)
+            [r.get('future').result() for r in result_list]
 
     def set_await_map(self, node_run_list):
         sorted_node_run_list = sorted(node_run_list, key=lambda n: n.get('node').node.y)
@@ -387,9 +410,6 @@ class WorkflowManage:
                 for i in range(index)]
 
     def run_chain(self, current_node, node_result_future=None):
-        if current_node is None:
-            start_node = self.get_start_node()
-            current_node = get_node(start_node.type)(start_node, self.params, self)
         if node_result_future is None:
             node_result_future = self.run_node_future(current_node)
         try:
@@ -401,18 +421,10 @@ class WorkflowManage:
             result = self.hand_event_node_result(current_node,
                                                  node_result_future) if is_stream else self.hand_node_result(
                 current_node, node_result_future)
-            with self.lock:
-                if current_node.status == 500:
-                    return
-                node_list = self.get_next_node_list(current_node, result)
-            # 获取到可执行的子节点
-            result_list = [{'node': node, 'future': self.run_chain_async(node, None)} for node in node_list]
-            self.set_await_map(result_list)
-            [r.get('future').result() for r in result_list]
-            if self.status == 0:
-                self.status = 200
+            return result
         except Exception as e:
             traceback.print_exc()
+        return []
 
     def hand_node_result(self, current_node, node_result_future):
         try:
@@ -454,6 +466,7 @@ class WorkflowManage:
                         content = r
                         child_node = {}
                         node_is_end = False
+                        view_type = current_node.view_type
                         if isinstance(r, dict):
                             content = r.get('content')
                             child_node = {'runtime_node_id': r.get('runtime_node_id'),
@@ -461,6 +474,7 @@ class WorkflowManage:
                                 , 'child_node': r.get('child_node')}
                             real_node_id = r.get('real_node_id')
                             node_is_end = r.get('node_is_end')
+                            view_type = r.get('view_type')
                         chunk = self.base_to_response.to_stream_chunk_response(self.params['chat_id'],
                                                                                self.params['chat_record_id'],
                                                                                current_node.id,
@@ -468,7 +482,7 @@ class WorkflowManage:
                                                                                content, False, 0, 0,
                                                                                {'node_type': current_node.type,
                                                                                 'runtime_node_id': current_node.runtime_node_id,
-                                                                                'view_type': current_node.view_type,
+                                                                                'view_type': view_type,
                                                                                 'child_node': child_node,
                                                                                 'node_is_end': node_is_end,
                                                                                 'real_node_id': real_node_id})
@@ -480,7 +494,7 @@ class WorkflowManage:
                                                                            '', False, 0, 0, {'node_is_end': True,
                                                                                              'runtime_node_id': current_node.runtime_node_id,
                                                                                              'node_type': current_node.type,
-                                                                                             'view_type': current_node.view_type,
+                                                                                             'view_type': view_type,
                                                                                              'child_node': child_node,
                                                                                              'real_node_id': real_node_id})
                     node_chunk.end(chunk)
@@ -575,35 +589,29 @@ class WorkflowManage:
 
     def get_answer_text_list(self):
         result = []
-        next_node_id_list = []
-        if self.start_node is not None:
-            next_node_id_list = [edge.targetNodeId for edge in self.flow.edges if
-                                 edge.sourceNodeId == self.start_node.id]
-        for index in range(len(self.node_context)):
-            node = self.node_context[index]
-            up_node = None
-            if index > 0:
-                up_node = self.node_context[index - 1]
-            answer_text = node.get_answer_text()
-            if answer_text is not None:
-                if up_node is None or node.view_type == 'single_view' or (
-                        node.view_type == 'many_view' and up_node.view_type == 'single_view'):
-                    result.append(node.get_answer_text())
-                elif self.chat_record is not None and next_node_id_list.__contains__(
-                        node.id) and up_node is not None and not next_node_id_list.__contains__(
-                    up_node.id):
-                    result.append(node.get_answer_text())
+        answer_list = reduce(lambda x, y: [*x, *y],
+                             [n.get_answer_list() for n in self.node_context if n.get_answer_list() is not None],
+                             [])
+        up_node = None
+        for index in range(len(answer_list)):
+            current_answer = answer_list[index]
+            if len(current_answer.content) > 0:
+                if up_node is None or current_answer.view_type == 'single_view' or (
+                        current_answer.view_type == 'many_view' and up_node.view_type == 'single_view'):
+                    result.append(current_answer)
                 else:
                     if len(result) > 0:
                         exec_index = len(result) - 1
-                        content = result[exec_index]['content']
-                        result[exec_index]['content'] += answer_text['content'] if len(
-                            content) == 0 else ('\n\n' + answer_text['content'])
+                        content = result[exec_index].content
+                        result[exec_index].content += current_answer.content if len(
+                            content) == 0 else ('\n\n' + current_answer.content)
                     else:
-                        answer_text = node.get_answer_text()
-                        result.insert(0, answer_text)
-
-        return result
+                        result.insert(0, current_answer)
+                up_node = current_answer
+        if len(result) == 0:
+            # 如果没有响应 就响应一个空数据
+            return [Answer('', '', '', '', {}).to_dict()]
+        return [r.to_dict() for r in result]
 
     def get_next_node(self):
         """

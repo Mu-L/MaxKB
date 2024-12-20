@@ -11,19 +11,24 @@
 
       <el-tab-pane label="基础组件" name="base">
         <el-scrollbar height="400">
-          <template v-for="(item, index) in filter_menu_nodes" :key="index">
-            <div
-              class="workflow-dropdown-item cursor flex p-8-12"
-              @click.stop="clickNodes(item)"
-              @mousedown.stop="onmousedown(item)"
-            >
-              <component :is="iconComponent(`${item.type}-icon`)" class="mr-8 mt-4" :size="32" />
-              <div class="pre-wrap">
-                <div class="lighter">{{ item.label }}</div>
-                <el-text type="info" size="small">{{ item.text }}</el-text>
+          <div v-if="filter_menu_nodes.length > 0">
+            <template v-for="(item, index) in filter_menu_nodes" :key="index">
+              <div
+                class="workflow-dropdown-item cursor flex p-8-12"
+                @click.stop="clickNodes(item)"
+                @mousedown.stop="onmousedown(item)"
+              >
+                <component :is="iconComponent(`${item.type}-icon`)" class="mr-8 mt-4" :size="32" />
+                <div class="pre-wrap">
+                  <div class="lighter">{{ item.label }}</div>
+                  <el-text type="info" size="small">{{ item.text }}</el-text>
+                </div>
               </div>
-            </div>
-          </template>
+            </template>
+          </div>
+          <div v-else class="ml-16 mt-8">
+            <el-text type="info">没有找到相关结果</el-text>
+          </div>
         </el-scrollbar>
       </el-tab-pane>
       <el-tab-pane label="函数库" name="function">
@@ -75,9 +80,9 @@
                   :item="item"
                 />
                 <div class="pre-wrap" style="width: 60%">
-                  <auto-tooltip :content="item.name" style="width: 80%" class="lighter">
+                  <div class="lighter ellipsis" :title="item.name">
                     {{ item.name }}
-                  </auto-tooltip>
+                  </div>
                   <el-text type="info" size="small" style="width: 80%">{{ item.desc }}</el-text>
                 </div>
                 <div class="status-tag" style="margin-left: auto">
@@ -166,7 +171,8 @@ function clickNodes(item: any, data?: any, type?: string) {
             ? {}
             : {
                 ...(fileUploadSetting.document ? { document_list: [] } : {}),
-                ...(fileUploadSetting.image ? { image_list: [] } : {})
+                ...(fileUploadSetting.image ? { image_list: [] } : {}),
+                ...(fileUploadSetting.audio ? { audio_list: [] } : {})
               })
         }
       } else {
@@ -210,7 +216,8 @@ function onmousedown(item: any, data?: any, type?: string) {
             ? {}
             : {
                 ...(fileUploadSetting.document ? { document_list: [] } : {}),
-                ...(fileUploadSetting.image ? { image_list: [] } : {})
+                ...(fileUploadSetting.image ? { image_list: [] } : {}),
+                ...(fileUploadSetting.audio ? { audio_list: [] } : {})
               })
         }
       } else {

@@ -14,9 +14,9 @@
           <el-card class="mb-8" shadow="never" style="--el-card-padding: 12px 16px">
             <div class="flex-between cursor" @click="current = current === index ? '' : index">
               <div class="flex align-center">
-                <el-icon class="mr-8 arrow-icon" :class="current === index ? 'rotate-90' : ''"
-                  ><CaretRight
-                /></el-icon>
+                <el-icon class="mr-8 arrow-icon" :class="current === index ? 'rotate-90' : ''">
+                  <CaretRight />
+                </el-icon>
                 <component
                   :is="iconComponent(`${item.type}-icon`)"
                   class="mr-8"
@@ -32,15 +32,18 @@
                     item.type === WorkflowType.Question ||
                     item.type === WorkflowType.AiChat ||
                     item.type === WorkflowType.ImageUnderstandNode ||
+                    item.type === WorkflowType.ImageGenerateNode ||
                     item.type === WorkflowType.Application
                   "
                   >{{ item?.message_tokens + item?.answer_tokens }} tokens</span
                 >
                 <span class="mr-16 color-secondary">{{ item?.run_time?.toFixed(2) || 0.0 }} s</span>
-                <el-icon class="success" :size="16" v-if="item.status === 200"
-                  ><CircleCheck
-                /></el-icon>
-                <el-icon class="danger" :size="16" v-else><CircleClose /></el-icon>
+                <el-icon class="success" :size="16" v-if="item.status === 200">
+                  <CircleCheck />
+                </el-icon>
+                <el-icon class="danger" :size="16" v-else>
+                  <CircleClose />
+                </el-icon>
               </div>
             </div>
             <el-collapse-transition>
@@ -97,6 +100,20 @@
                             </template>
                           </el-space>
                         </div>
+                        <div v-if="item.audio_list?.length > 0">
+                          <p class="mb-8 color-secondary">语音文件:</p>
+
+                          <el-space wrap>
+                            <template v-for="(f, i) in item.audio_list" :key="i">
+                              <audio
+                                :src="f.url"
+                                controls
+                                style="width: 300px; height: 43px"
+                                class="border-r-4"
+                              />
+                            </template>
+                          </el-space>
+                        </div>
                       </div>
                     </div>
                   </template>
@@ -121,7 +138,7 @@
                             <ParagraphCard :data="paragraph" :index="paragraphIndex" />
                           </template>
                         </template>
-                        <template v-else> - </template>
+                        <template v-else> -</template>
                       </div>
                     </div>
                   </template>
@@ -167,7 +184,7 @@
                             ><span>{{ history.content }}</span>
                           </p>
                         </template>
-                        <template v-else> - </template>
+                        <template v-else> -</template>
                       </div>
                     </div>
                     <div
@@ -191,7 +208,7 @@
                           :modelValue="item.answer"
                           style="background: none"
                         />
-                        <template v-else> - </template>
+                        <template v-else> -</template>
                       </div>
                     </div>
                   </template>
@@ -209,7 +226,7 @@
                             :modelValue="item.answer"
                             style="background: none"
                           />
-                          <template v-else> - </template>
+                          <template v-else> -</template>
                         </el-scrollbar>
                       </div>
                     </div>
@@ -245,9 +262,79 @@
                               :modelValue="file_content"
                               style="background: none"
                             />
-                            <template v-else> - </template>
+                            <template v-else> -</template>
                           </el-card>
                         </el-scrollbar>
+                      </div>
+                    </div>
+                  </template>
+                  <template v-if="item.type === WorkflowType.SpeechToTextNode">
+                    <div class="card-never border-r-4">
+                      <h5 class="p-8-12">参数输入</h5>
+                      <div class="p-8-12 border-t-dashed lighter">
+                        <div class="mb-8">
+                          <div v-if="item.audio_list?.length > 0">
+                            <p class="mb-8 color-secondary">语音文件:</p>
+
+                            <el-space wrap>
+                              <template v-for="(f, i) in item.audio_list" :key="i">
+                                <audio
+                                  :src="f.url"
+                                  controls
+                                  style="width: 300px; height: 43px"
+                                  class="border-r-4"
+                                />
+                              </template>
+                            </el-space>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="card-never border-r-4">
+                      <h5 class="p-8-12">参数输出</h5>
+                      <div class="p-8-12 border-t-dashed lighter">
+                        <el-card
+                          shadow="never"
+                          style="--el-card-padding: 8px"
+                          v-for="(file_content, index) in item.content"
+                          :key="index"
+                          class="mb-8"
+                        >
+                          <MdPreview
+                            v-if="file_content"
+                            ref="editorRef"
+                            editorId="preview-only"
+                            :modelValue="file_content"
+                            style="background: none"
+                          />
+                          <template v-else> -</template>
+                        </el-card>
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-if="item.type === WorkflowType.TextToSpeechNode">
+                    <div class="card-never border-r-4">
+                      <h5 class="p-8-12">参数输入</h5>
+                      <div class="p-8-12 border-t-dashed lighter">
+                        <div class="p-8-12 border-t-dashed lighter">
+                          <p class="mb-8 color-secondary">文本内容:</p>
+                          <div v-if="item.content">
+                            <MdPreview
+                              ref="editorRef"
+                              editorId="preview-only"
+                              :modelValue="item.content"
+                              style="background: none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="card-never border-r-4">
+                      <h5 class="p-8-12">参数输出</h5>
+                      <div class="p-8-12 border-t-dashed lighter">
+                        <p class="mb-8 color-secondary">语音文件:</p>
+                        <div v-if="item.answer" v-html="item.answer"></div>
                       </div>
                     </div>
                   </template>
@@ -299,7 +386,7 @@
                             </CardBox>
                           </template>
                         </template>
-                        <template v-else> - </template>
+                        <template v-else> -</template>
                       </div>
                     </div>
                     <div class="card-never border-r-4 mt-8">
@@ -333,7 +420,7 @@
                             </CardBox>
                           </template>
                         </template>
-                        <template v-else> - </template>
+                        <template v-else> -</template>
                       </div>
                     </div>
                   </template>
@@ -404,7 +491,7 @@
                             <span v-else>{{ history.content }}</span>
                           </p>
                         </template>
-                        <template v-else> - </template>
+                        <template v-else> -</template>
                       </div>
                     </div>
                     <div class="card-never border-r-4 mt-8">
@@ -440,7 +527,31 @@
                           :modelValue="item.answer"
                           style="background: none"
                         />
-                        <template v-else> - </template>
+                        <template v-else> -</template>
+                      </div>
+                    </div>
+                  </template>
+                  <!-- 图片生成 -->
+                  <template v-if="item.type == WorkflowType.ImageGenerateNode">
+                    <div class="card-never border-r-4 mt-8">
+                      <h5 class="p-8-12">本次对话</h5>
+                      <div class="p-8-12 border-t-dashed lighter pre-wrap">
+                        {{ item.question || '-' }}
+                      </div>
+                    </div>
+                    <div class="card-never border-r-4 mt-8">
+                      <h5 class="p-8-12">
+                        {{ item.type == WorkflowType.Application ? '参数输出' : 'AI 回答' }}
+                      </h5>
+                      <div class="p-8-12 border-t-dashed lighter">
+                        <MdPreview
+                          v-if="item.answer"
+                          ref="editorRef"
+                          editorId="preview-only"
+                          :modelValue="item.answer"
+                          style="background: none"
+                        />
+                        <template v-else> -</template>
                       </div>
                     </div>
                   </template>
@@ -468,6 +579,7 @@ import { iconComponent } from '@/workflow/icons/utils'
 import { WorkflowType } from '@/enums/workflow'
 import { getImgUrl } from '@/utils/utils'
 import DynamicsForm from '@/components/dynamics-form/index.vue'
+
 const dialogVisible = ref(false)
 const detail = ref<any[]>([])
 
@@ -495,19 +607,24 @@ defineExpose({ open })
   .el-dialog__header {
     padding: 24px 24px 0 24px;
   }
+
   .el-dialog__body {
     padding: 8px !important;
   }
+
   .execution-details {
     max-height: calc(100vh - 260px);
+
     .arrow-icon {
       transition: 0.2s;
     }
   }
 }
+
 @media only screen and (max-width: 768px) {
   .execution-details-dialog {
     width: 90% !important;
+
     .footer-content {
       display: block;
     }
