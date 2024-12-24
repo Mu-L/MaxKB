@@ -1,5 +1,5 @@
 import { Result } from '@/request/Result'
-import { get, post, postStream, del, put, request, download } from '@/request/index'
+import { get, post, postStream, del, put, request, download, exportFile } from '@/request/index'
 import type { pageRequest } from '@/api/type/common'
 import type { ApplicationFormType } from '@/api/type/application'
 import { type Ref } from 'vue'
@@ -293,6 +293,12 @@ const getApplicationImageModel: (
   return get(`${prefix}/${application_id}/model`, { model_type: 'IMAGE' }, loading)
 }
 
+const getApplicationTTIModel: (
+  application_id: string,
+  loading?: Ref<boolean>
+) => Promise<Result<Array<any>>> = (application_id, loading) => {
+  return get(`${prefix}/${application_id}/model`, { model_type: 'TTI' }, loading)
+}
 
 /**
  * 发布应用
@@ -370,7 +376,6 @@ const uploadFile: (
   return post(`${prefix}/${application_id}/chat/${chat_id}/upload_file`, data, undefined, loading)
 }
 
-
 /**
  * 语音转文本
  */
@@ -424,9 +429,10 @@ const getPlatformConfig: (application_id: string, type: string) => Promise<Resul
 const updatePlatformConfig: (
   application_id: string,
   type: string,
-  data: any
-) => Promise<Result<any>> = (application_id, type, data) => {
-  return post(`/platform/${application_id}/${type}`, data)
+  data: any,
+  loading?: Ref<boolean>
+) => Promise<Result<any>> = (application_id, type, data, loading) => {
+  return post(`/platform/${application_id}/${type}`, data, undefined, loading)
 }
 /**
  * 更新平台状态
@@ -496,6 +502,28 @@ const getUserList: (type: string, loading?: Ref<boolean>) => Promise<Result<any>
   return get(`/user/list/${type}`, undefined, loading)
 }
 
+const exportApplication = (
+  application_id: string,
+  application_name: string,
+  loading?: Ref<boolean>
+) => {
+  return exportFile(
+    application_name + '.mk',
+    `/application/${application_id}/export`,
+    undefined,
+    loading
+  )
+}
+
+/**
+ * 导入应用
+ */
+const importApplication: (data: any, loading?: Ref<boolean>) => Promise<Result<any>> = (
+  data,
+  loading
+) => {
+  return post(`${prefix}/import`, data, undefined, loading)
+}
 export default {
   getAllAppilcation,
   getApplication,
@@ -523,6 +551,7 @@ export default {
   getApplicationSTTModel,
   getApplicationTTSModel,
   getApplicationImageModel,
+  getApplicationTTIModel,
   postSpeechToText,
   postTextToSpeech,
   getPlatformStatus,
@@ -536,5 +565,7 @@ export default {
   playDemoText,
   getUserList,
   getApplicationList,
-  uploadFile
+  uploadFile,
+  exportApplication,
+  importApplication
 }

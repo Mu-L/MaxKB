@@ -242,18 +242,14 @@ function clickoutside() {
   showPopover.value = false
 }
 async function publicHandle() {
-  // 先执行保存
-  const obj = {
-    work_flow: getGraphData()
-  }
-  await application.asyncPutApplication(id, obj)
   // 后执行发布
   workflowRef.value
     ?.validate()
-    .then(() => {
+    .then(async () => {
       const obj = {
         work_flow: getGraphData()
       }
+      await application.asyncPutApplication(id, obj)
       const workflow = new WorkFlowInstance(obj.work_flow)
       try {
         workflow.is_valid()
@@ -405,12 +401,7 @@ onBeforeUnmount(() => {
   position: relative;
   border-radius: 8px;
   border: 1px solid #ffffff;
-  background: linear-gradient(
-      188deg,
-      rgba(235, 241, 255, 0.2) 39.6%,
-      rgba(231, 249, 255, 0.2) 94.3%
-    ),
-    #eff0f1;
+  background: var(--dialog-bg-gradient-color);
   box-shadow: 0px 4px 8px 0px rgba(31, 35, 41, 0.1);
   position: fixed;
   bottom: 16px;

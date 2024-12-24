@@ -1,5 +1,5 @@
 <template>
-  <LayoutContainer header="文档">
+  <LayoutContainer header="文档" class="document-main">
     <div class="main-calc-height">
       <div class="p-24">
         <div class="flex-between">
@@ -99,34 +99,44 @@
                         >全部</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '1' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.SUCCESS ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '1')"
+                        :command="beforeCommand('status', State.SUCCESS)"
                         >成功</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '2' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.FAILURE ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '2')"
+                        :command="beforeCommand('status', State.FAILURE)"
                         >失败</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '0' ? 'is-active' : ''"
+                        :class="
+                          filterMethod['status'] === State.STARTED &&
+                          filterMethod['task_type'] == TaskType.EMBEDDING
+                            ? 'is-active'
+                            : ''
+                        "
                         class="justify-center"
-                        :command="beforeCommand('status', '0')"
+                        :command="beforeCommand('status', State.STARTED, TaskType.EMBEDDING)"
                         >索引中</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '3' ? 'is-active' : ''"
+                        :class="filterMethod['status'] === State.PENDING ? 'is-active' : ''"
                         class="justify-center"
-                        :command="beforeCommand('status', '3')"
+                        :command="beforeCommand('status', State.PENDING)"
                         >排队中</el-dropdown-item
                       >
                       <el-dropdown-item
-                        :class="filterMethod['status'] === '4' ? 'is-active' : ''"
+                        :class="
+                          filterMethod['status'] === State.STARTED &&
+                          filterMethod['task_type'] === TaskType.GENERATE_PROBLEM
+                            ? 'is-active'
+                            : ''
+                        "
                         class="justify-center"
-                        :command="beforeCommand('status', '4')"
-                        >生成问题中</el-dropdown-item
+                        :command="beforeCommand('status', State.STARTED, TaskType.GENERATE_PROBLEM)"
+                        >生成中</el-dropdown-item
                       >
                     </el-dropdown-menu>
                   </template>
@@ -177,9 +187,10 @@
             <template #default="{ row }">
               <div @click.stop>
                 <el-switch
+                  :loading="loading"
                   size="small"
                   v-model="row.is_active"
-                  @change="changeState($event, row)"
+                  :before-change="() => changeState(row)"
                 />
               </div>
             </template>
@@ -294,7 +305,11 @@
                         </el-dropdown-item>
                         <el-dropdown-item @click="exportDocument(row)">
                           <AppIcon iconName="app-export"></AppIcon>
-                          导出
+                          导出Excel
+                        </el-dropdown-item>
+                        <el-dropdown-item @click="exportDocumentZip(row)">
+                          <AppIcon iconName="app-export"></AppIcon>
+                          导出Zip
                         </el-dropdown-item>
                         <el-dropdown-item icon="Delete" @click.stop="deleteDocument(row)"
                           >删除</el-dropdown-item
@@ -370,7 +385,11 @@
                         >
                         <el-dropdown-item @click="exportDocument(row)">
                           <AppIcon iconName="app-export"></AppIcon>
-                          导出
+                          导出Excel
+                        </el-dropdown-item>
+                        <el-dropdown-item @click="exportDocumentZip(row)">
+                          <AppIcon iconName="app-export"></AppIcon>
+                          导出Zip
                         </el-dropdown-item>
                         <el-dropdown-item icon="Delete" @click.stop="deleteDocument(row)"
                           >删除</el-dropdown-item
@@ -384,11 +403,24 @@
           </el-table-column>
         </app-table>
       </div>
+
       <ImportDocumentDialog ref="ImportDocumentDialogRef" :title="title" @refresh="refresh" />
       <SyncWebDialog ref="SyncWebDialogRef" @refresh="refresh" />
       <!-- 选择知识库 -->
       <SelectDatasetDialog ref="SelectDatasetDialogRef" @refresh="refreshMigrate" />
       <GenerateRelatedDialog ref="GenerateRelatedDialogRef" @refresh="refresh" />
+    </div>
+    <div class="mul-operation w-full flex" v-if="multipleSelection.length !== 0">
+      <el-button :disabled="multipleSelection.length === 0" @click="cancelTaskHandle(1)">
+        取消向量化
+      </el-button>
+      <el-button :disabled="multipleSelection.length === 0" @click="cancelTaskHandle(2)">
+        取消生成
+      </el-button>
+      <el-text type="info" class="secondary ml-24">
+        已选 {{ multipleSelection.length }} 项
+      </el-text>
+      <el-button class="ml-16" type="primary" link @click="clearSelection"> 清空 </el-button>
     </div>
   </LayoutContainer>
 </template>
@@ -459,11 +491,41 @@ const multipleSelection = ref<any[]>([])
 const title = ref('')
 
 const SelectDatasetDialogRef = ref()
+
 const exportDocument = (document: any) => {
   documentApi.exportDocument(document.name, document.dataset_id, document.id, loading).then(() => {
     MsgSuccess('导出成功')
   })
 }
+const exportDocumentZip = (document: any) => {
+  documentApi
+    .exportDocumentZip(document.name, document.dataset_id, document.id, loading)
+    .then(() => {
+      MsgSuccess('导出成功')
+    })
+}
+
+function cancelTaskHandle(val: any) {
+  const arr: string[] = []
+  multipleSelection.value.map((v) => {
+    if (v) {
+      arr.push(v.id)
+    }
+  })
+  const obj = {
+    id_list: arr,
+    type: val
+  }
+  documentApi.batchCancelTask(id, obj, loading).then(() => {
+    MsgSuccess('批量取消成功')
+    multipleTableRef.value?.clearSelection()
+  })
+}
+
+function clearSelection() {
+  multipleTableRef.value?.clearSelection()
+}
+
 function openDatasetDialog(row?: any) {
   const arr: string[] = []
   if (row) {
@@ -481,13 +543,18 @@ function openDatasetDialog(row?: any) {
 
 function dropdownHandle(obj: any) {
   filterMethod.value[obj.attr] = obj.command
+  if (obj.attr == 'status') {
+    filterMethod.value['task_type'] = obj.task_type
+  }
+
   getList()
 }
 
-function beforeCommand(attr: string, val: any) {
+function beforeCommand(attr: string, val: any, task_type?: number) {
   return {
     attr: attr,
-    command: val
+    command: val,
+    task_type
   }
 }
 const cancelTask = (row: any, task_type: number) => {
@@ -602,17 +669,28 @@ function syncMulDocument() {
 }
 
 function deleteMulDocument() {
-  const arr: string[] = []
-  multipleSelection.value.map((v) => {
-    if (v) {
-      arr.push(v.id)
+  MsgConfirm(
+    `是否批量删除 ${multipleSelection.value.length} 个文档?`,
+    `所选文档中的分段会跟随删除，请谨慎操作。`,
+    {
+      confirmButtonText: '删除',
+      confirmButtonClass: 'danger'
     }
-  })
-  documentApi.delMulDocument(id, arr, loading).then(() => {
-    MsgSuccess('批量删除成功')
-    multipleTableRef.value?.clearSelection()
-    getList()
-  })
+  )
+    .then(() => {
+      const arr: string[] = []
+      multipleSelection.value.map((v) => {
+        if (v) {
+          arr.push(v.id)
+        }
+      })
+      documentApi.delMulDocument(id, arr, loading).then(() => {
+        MsgSuccess('批量删除成功')
+        multipleTableRef.value?.clearSelection()
+        getList()
+      })
+    })
+    .catch(() => {})
 }
 
 function batchRefresh() {
@@ -663,18 +741,24 @@ function deleteDocument(row: any) {
   更新名称或状态
 */
 function updateData(documentId: string, data: any, msg: string) {
-  documentApi.putDocument(id, documentId, data, loading).then((res) => {
-    const index = documentData.value.findIndex((v) => v.id === documentId)
-    documentData.value.splice(index, 1, res.data)
-    MsgSuccess(msg)
-  })
+  documentApi
+    .putDocument(id, documentId, data, loading)
+    .then((res) => {
+      const index = documentData.value.findIndex((v) => v.id === documentId)
+      documentData.value.splice(index, 1, res.data)
+      MsgSuccess(msg)
+      return true
+    })
+    .catch(() => {
+      return false
+    })
 }
 
-function changeState(bool: Boolean, row: any) {
+function changeState(row: any) {
   const obj = {
-    is_active: bool
+    is_active: !row.is_active
   }
-  const str = bool ? '启用成功' : '禁用成功'
+  const str = !row.is_active ? '启用成功' : '禁用成功'
   currentMouseId.value && updateData(row.id, obj, str)
 }
 
@@ -765,4 +849,20 @@ onBeforeUnmount(() => {
   closeInterval()
 })
 </script>
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+.document-main {
+  box-sizing: border-box;
+  .mul-operation {
+    position: fixed;
+    margin-left: var(--sidebar-width);
+    bottom: 0;
+    right: 24px;
+    width: calc(100% - var(--sidebar-width) - 48px);
+    padding: 16px 24px;
+    box-sizing: border-box;
+    background: #ffffff;
+    z-index: 22;
+    box-shadow: 0px -2px 4px 0px rgba(31, 35, 41, 0.08);
+  }
+}
+</style>
